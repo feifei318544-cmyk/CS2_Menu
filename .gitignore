@@ -1,0 +1,99 @@
+# ---------- CMake ----------
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+CTestTestfile.cmake
+install_manifest.txt
+compile_commands.json
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# CLion / CMake 构建目录
+cmake-build-*/
+build/
+out/
+
+# ---------- Visual Studio ----------
+.vs/
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.VC.db
+*.VC.opendb
+ipch/
+Debug/
+Release/
+x64/
+x86/
+ARM/
+ARM64/
+
+# ---------- 编译产物 ----------
+*.obj
+*.o
+*.lo
+*.slo
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.dll
+*.exe
+*.so
+*.dylib
+*.a
+*.out
+*.app
+
+# ---------- MinHook / ImGui 第三方库 ----------
+# 如果这两个目录是你手动放进来的源码，可以不忽略；
+# 如果想忽略，把下面两行取消注释：
+# minhook_debug_x64/
+# imgui_d11/
+
+# ---------- 调试 / 日志 ----------
+*.log
+*.txt
+!README.txt
+!requirements.txt
+*.pdb
+*.ipch
+*.dmp
+*.mdmp
+
+# ---------- IDE ----------
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.clangd/
+.cache/
+
+# ---------- 操作系统 ----------
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ---------- 敏感 / 本地配置 ----------
+*.local
+*.user
+*.env
+.env
+secrets.h
+
+# ---------- 临时文件 ----------
+*.tmp
+*.temp
+*.bak
+*.old
+*.orig
+*.rej
