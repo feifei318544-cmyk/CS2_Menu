@@ -9,17 +9,17 @@
 
 - **类型**：CS2 内部辅助 DLL
 - **功能**：
-   静态自瞄（准星可见转动）
-   ESP 透视（方框 + 顶部射线 + 血量 + 名称）
-   ImGui 菜单（DX11 Present hook）
+  - 静态自瞄（准星可见转动）
+  - ESP 透视（方框 + 顶部射线 + 血量 + 名称）
+  - ImGui 菜单（DX11 Present hook）
 
 ### 当前状态
 
 | 模块 | 状态 |
 |---|---|
-| 静态自瞄 |  已跑通 |
-| 透视 |  已跑通（方框、射线、血量、名称） |
-| 菜单 |  已跑通 |
+| 静态自瞄 | ✅ 已跑通 |
+| 透视 | ✅ 已跑通（方框、射线、血量、名称） |
+| 菜单 | ✅ 已跑通 |
 
 ---
 
@@ -39,7 +39,7 @@
 
 ## 三、目录结构
 
-```
+```text
 CS_menu/
 ├── CMakeLists.txt
 ├── dll_main.cpp              # DllMain + Present hook + ImGui 初始化
@@ -101,7 +101,7 @@ cmake --build . --config Release
 |---|---|
 | **F11** | 开启 / 关闭菜单 |
 
-**修改快捷键**：在 `dll_main.cpp` 中找到 GetAsyncKeyState(VK_F11)`，把 `VK_F11` 改成 `VK_INSERT`。
+**修改快捷键**：在 `dll_main.cpp` 中找到 `GetAsyncKeyState(VK_F11)`，把 `VK_F11` 改成 `VK_INSERT`。
 
 ```cpp
 // 原代码
@@ -190,7 +190,88 @@ pitch = -atan2(dz, hyp) * 180 / PI
 
 ---
 
-## 七、偏移更新说明
+## 七、性能优化要点
+
+### 1. ViewMatrix 全局共享
+
+**问题**：`aimbot` 和 `visual` 各自读 16 个 float 的 ViewMatrix，每次带 `VirtualQuery`。
+
+**解决**：把 ViewMatrix 缓存放 `game` 里，每帧只读一次。
+
+```cpp
+// entity.cpp
+static float g_view_matrix[16] = {};
+
+void update_frame_cache() {
+    const std::uintptr_t base = tools::mem::client_base();
+    if (base) {
+        const std::uintptr_t matrix = base + off::client::dwViewMatrix;
+        for (int i = 0; i < 16; ++i) {
+            __try {
+                g_view_matrix[i] = *reinterpret_cast<const float*>(
+                    matrix + i * sizeof(float));
+            } __except (EXCEPTION_EXECUTE_HANDLER) {
+                g_view_matrix[i] = 0.0f;
+            }
+        }
+    }
+}
+```
+
+### 2. 敌人列表共享缓存
+
+**问题**：`aimbot` 和 `visual` 各自扫 16 × 512 = 8192 个 slot。
+
+**解决**：共享一份缓存，每 3 帧刷新一次。
+
+```cpp
+// entity.cpp
+static std::vector<std::uintptr_t> g_pawns;
+static int g_pawns_tick = 0;
+static constexpr int PAWNS_CACHE_INTERVAL = 3;
+
+const std::vector<std::uintptr_t>& get_pawns_cached() {
+    if (g_pawns_tick <= 0) {
+        g_pawns = get_all_pawns();
+        g_pawns_tick = PAWNS_CACHE_INTERVAL;
+    }
+    --g_pawns_tick;
+    return g_pawns;
+}
+```
+
+### 3. `read_fast` 替代 `tools::mem::read`
+
+**问题**：`tools::mem::read` 每次带 `VirtualQuery`，慢 50 倍。
+
+**解决**：对已确认可读的地址，用 `__try` 保护的 `read_fast`。
+
+```cpp
+template<typename T>
+static T read_fast(std::uintptr_t addr) {
+    __try {
+        return *reinterpret_cast<const T *>(addr);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return T{};
+    }
+}
+```
+
+### 4. 屏幕尺寸每帧只取一次
+
+**问题**：每个敌人调一次 `GetClientRect(GetForegroundWindow())`。
+
+**解决**：缓存在 `game` 里，每帧只更新一次。
+
+### 5. 优化效果
+
+| 状态 | 优化前 | 优化后 |
+|---|---|---|
+| 两个功能都开 | 50 帧 | 200+ 帧 |
+
+---
+
+## 八、偏移更新说明
 
 - `offsets.hpp` 来自 `cs2-dumper`，最后同步时间：**2026-10-06 17:44:59 UTC**
 - **每次游戏更新后必须重新跑 dumper 同步**
@@ -201,7 +282,7 @@ pitch = -atan2(dz, hyp) * 180 / PI
 
 ---
 
-## 八、已知限制与坑
+## 九、已知限制与坑
 
 ### 1. 静默自瞄不可行（已放弃）
 
@@ -244,16 +325,10 @@ pitch = -atan2(dz, hyp) * 180 / PI
 
 - `LINK : warning LNK4098`
 - 可以忽略，不影响运行
-
-### 8. F11 不要用作菜单快捷键
-
-- F11 在 CS2 中是「切换全屏/窗口化」
-- 按 F11 会触发游戏全屏切换 → `ResizeBuffers` → 菜单消失
-- **推荐用 Insert 或 F8/F9**
-
+  
 ---
 
-## 九、下一步可做的优化
+## 十、下一步可做的优化
 
 1. **平滑自瞄**
    - 加 `g_smooth` 参数，每帧只插值一部分角度
@@ -278,7 +353,7 @@ pitch = -atan2(dz, hyp) * 180 / PI
 
 ---
 
-## 十、注意事项汇总
+## 十一、注意事项汇总
 
 1. **偏移必须保持最新**：每次游戏更新后重新跑 dumper，同步 `offsets.hpp`
 2. **不要用 F11 当快捷键**：会和游戏全屏切换冲突
@@ -288,8 +363,9 @@ pitch = -atan2(dz, hyp) * 180 / PI
 6. **MinHook 原版对某些序言有 bug**：Hook 函数入口尽量选普通序言
 7. **注入时机**：建议在游戏主界面注入，避免启动阶段注入
 8. **编译警告 `LNK4098` 可忽略**
+9. **性能优化已完成**：ViewMatrix、敌人列表、屏幕尺寸三份缓存合并到 `game`，`aimbot` 和 `visual` 共享
 
 ---
 
 > **文档结束**
-> 最后更新：2026-10-08
+> 最后更新：2026-10-13
