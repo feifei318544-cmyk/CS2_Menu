@@ -325,13 +325,7 @@ static T read_fast(std::uintptr_t addr) {
 
 - `LINK : warning LNK4098`
 - 可以忽略，不影响运行
-
-### 8. F11 不要用作菜单快捷键
-
-- F11 在 CS2 中是「切换全屏/窗口化」
-- 按 F11 会触发游戏全屏切换 → `ResizeBuffers` → 菜单消失
-- **推荐用 Insert 或 F8/F9**
-
+  
 ---
 
 ## 十、下一步可做的优化
