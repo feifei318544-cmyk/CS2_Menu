@@ -11,7 +11,7 @@
 
 namespace game {
     /*
-     * 快速读取（不带 VirtualQuery，用 __try 保护）
+     * 快速读取，不带 VirtualQuery，用 __try 保护
      * 只能用于已经确认可读的内存块
      * 比 tools::mem::read 快 50 倍以上
      */
@@ -26,7 +26,7 @@ namespace game {
 
     /*
      * 全局缓存正确步长
-     * 第一次调用时自动探测（用 local_pawn 反推），之后复用
+     * 第一次调用时自动探测，用 local_pawn 反推，之后复用
      * 0 = 未探测
      */
     static std::uintptr_t g_entity_step = 0;
@@ -74,13 +74,85 @@ namespace game {
     }
 
     /*
-     * 获取步长（第一次探测，之后缓存）
+     * 获取步长，第一次探测，之后缓存
      */
     static std::uintptr_t get_step() {
         if (g_entity_step == 0) {
             g_entity_step = detect_step();
         }
         return g_entity_step;
+    }
+
+    // 全局缓存：ViewMatrix
+    static float g_view_matrix[16] = {};
+
+    // 全局缓存：屏幕尺寸
+    static float g_screen_w = 0.0f;
+    static float g_screen_h = 0.0f;
+
+    // 全局缓存：敌人列表
+    static std::vector<std::uintptr_t> g_pawns;
+    static int g_pawns_tick = 0;
+    static constexpr int PAWNS_CACHE_INTERVAL = 3;
+
+    /*
+     * 每帧调用一次
+     * 刷新 ViewMatrix 和屏幕尺寸
+     */
+    void update_frame_cache() {
+        const std::uintptr_t base = tools::mem::client_base();
+        if (base) {
+            const std::uintptr_t matrix = base + off::client::dwViewMatrix;
+            for (int i = 0; i < 16; ++i) {
+                __try {
+                    g_view_matrix[i] = *reinterpret_cast<const float*>(
+                        matrix + i * sizeof(float));
+                } __except (EXCEPTION_EXECUTE_HANDLER) {
+                    g_view_matrix[i] = 0.0f;
+                }
+            }
+        }
+
+        RECT rect{};
+        GetClientRect(GetForegroundWindow(), &rect);
+        g_screen_w = static_cast<float>(rect.right - rect.left);
+        g_screen_h = static_cast<float>(rect.bottom - rect.top);
+    }
+
+    /*
+     * 用缓存的 ViewMatrix 转屏幕坐标
+     */
+    bool world_to_screen(const Vec3 &world, float &sx, float &sy) {
+        const float* m = g_view_matrix;
+
+        const float w = m[12] * world.x + m[13] * world.y
+                        + m[14] * world.z + m[15];
+        if (w < 0.65f) return false;
+
+        const float x = m[0] * world.x + m[1] * world.y
+                        + m[2] * world.z + m[3];
+        const float y = m[4] * world.x + m[5] * world.y
+                        + m[6] * world.z + m[7];
+
+        sx = (g_screen_w * 0.5f) + (x / w) * (g_screen_w * 0.5f);
+        sy = (g_screen_h * 0.5f) - (y / w) * (g_screen_h * 0.5f);
+        return true;
+    }
+
+    float screen_width()  { return g_screen_w; }
+    float screen_height() { return g_screen_h; }
+
+    /*
+     * 敌人列表缓存
+     * 每 PAWNS_CACHE_INTERVAL 帧刷新一次
+     */
+    const std::vector<std::uintptr_t>& get_pawns_cached() {
+        if (g_pawns_tick <= 0) {
+            g_pawns = get_all_pawns();
+            g_pawns_tick = PAWNS_CACHE_INTERVAL;
+        }
+        --g_pawns_tick;
+        return g_pawns;
     }
 
     /*
@@ -163,7 +235,7 @@ namespace game {
      */
     int get_health(std::uintptr_t entity) {
         if (!entity) return 0;
-        return tools::mem::read<int>(entity + schema::m_iHealth);
+        return read_fast<int>(entity + schema::m_iHealth);
     }
 
     /*
@@ -171,7 +243,7 @@ namespace game {
      */
     int get_team(std::uintptr_t entity) {
         if (!entity) return 0;
-        return tools::mem::read<std::uint8_t>(entity + schema::m_iTeamNum);
+        return read_fast<std::uint8_t>(entity + schema::m_iTeamNum);
     }
 
     /*
@@ -179,7 +251,7 @@ namespace game {
      */
     int get_life_state(std::uintptr_t entity) {
         if (!entity) return 1;
-        return tools::mem::read<std::uint8_t>(entity + schema::m_lifeState);
+        return read_fast<std::uint8_t>(entity + schema::m_lifeState);
     }
 
     /*
@@ -188,8 +260,7 @@ namespace game {
     bool is_alive(std::uintptr_t entity) {
         if (!entity) return false;
         const int hp = get_health(entity);
-        const int max_hp = tools::mem::read<int>(
-            entity + schema::m_iMaxHealth);
+        const int max_hp = read_fast<int>(entity + schema::m_iMaxHealth);
         return hp > 0 || max_hp > 0;
     }
 
@@ -214,18 +285,18 @@ namespace game {
     Vec3 get_origin(std::uintptr_t entity) {
         if (!entity) return {};
 
-        const std::uintptr_t node = tools::mem::read<std::uintptr_t>(
+        const std::uintptr_t node = read_fast<std::uintptr_t>(
             entity + schema::m_pGameSceneNode);
         if (!node) return {};
 
-        return tools::mem::read<Vec3>(node + schema::m_vecAbsOrigin);
+        return read_fast<Vec3>(node + schema::m_vecAbsOrigin);
     }
 
     /*
      * 扫 entity list 的所有 chunk + slot，返回所有 team 2/3 且 pos 有效的实体
      * 用自动探测的步长
      *
-     * 优化：chunk 只查一次 VirtualQuery，后续所有读用 read_fast（不带 VirtualQuery）
+     * 优化：chunk 只查一次 VirtualQuery，后续所有读用 read_fast，不带 VirtualQuery
      * 之前每帧 40960 次 VirtualQuery，现在每帧 16 次
      */
     std::vector<std::uintptr_t> get_all_pawns() {
@@ -257,7 +328,7 @@ namespace game {
             if (chunk_end < chunk) continue;
 
             for (int slot = 0; slot < 512; ++slot) {
-                // ★ read_fast：不带 VirtualQuery
+                // read_fast：不带 VirtualQuery
                 std::uintptr_t e = read_fast<std::uintptr_t>(chunk + step * slot);
                 if (!e || e < 0x10000 || e >= 0x7FFFFFFFFFFF
                     || e >= 0x7FF000000000ULL)
@@ -302,7 +373,7 @@ namespace game {
     std::uintptr_t get_controller_from_pawn(std::uintptr_t pawn) {
         if (!pawn) return 0;
 
-        const std::uint32_t handle = tools::mem::read<std::uint32_t>(
+        const std::uint32_t handle = read_fast<std::uint32_t>(
             pawn + 0x14BC);   // m_hController
         if (!handle || handle == 0xFFFFFFFF) return 0;
 
@@ -311,7 +382,7 @@ namespace game {
     }
 
     // 读 Controller 的玩家名字
-    // 返回内部静态缓冲区，调用完立刻用（不要保存指针）
+    // 返回内部静态缓冲区，调用完立刻用，不要保存指针
     const char* get_player_name(std::uintptr_t controller) {
         static char buf[128];
         buf[0] = '\0';
@@ -320,7 +391,7 @@ namespace game {
 
         // m_iszPlayerName 是 char[128]
         for (int i = 0; i < 127; ++i) {
-            char c = tools::mem::read<char>(controller + 0x6FC + i);
+            char c = read_fast<char>(controller + 0x6FC + i);
             buf[i] = c;
             if (c == '\0') break;
         }

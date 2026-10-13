@@ -5,25 +5,25 @@
 /**
  * 全局偏移，来自 cs2-dumper 的 output/offsets.hpp
  * 每次游戏更新后重新跑 dumper 同步。
- * 最后同步时间：2026-10-06 17:44:59 UTC
+ * 最后同步时间：2026-10-13 03:29:51 UTC
  */
 namespace off {
     namespace client {
-        constexpr std::ptrdiff_t dwCSGOInput = 0x2578160;
-        constexpr std::ptrdiff_t dwEntityList = 0x2717828;
-        constexpr std::ptrdiff_t dwGameEntitySystem = 0x2717828;
+        constexpr std::ptrdiff_t dwCSGOInput = 0x2572460;
+        constexpr std::ptrdiff_t dwEntityList = 0x2711598;
+        constexpr std::ptrdiff_t dwGameEntitySystem = 0x2711598;
         constexpr std::ptrdiff_t dwGameEntitySystem_highestEntityIndex = 0x2120;
-        constexpr std::ptrdiff_t dwGameRules = 0x255EE50;
-        constexpr std::ptrdiff_t dwGlobalVars = 0x222DE98;
-        constexpr std::ptrdiff_t dwGlowManager = 0x255EE60;
-        constexpr std::ptrdiff_t dwLocalPlayerController = 0x253A068;
-        constexpr std::ptrdiff_t dwLocalPlayerPawn = 0x2562808;
-        constexpr std::ptrdiff_t dwPlantedC4 = 0x24CA930;
-        constexpr std::ptrdiff_t dwPrediction = 0x2562710;
-        constexpr std::ptrdiff_t dwViewAngles = 0x25787E8;
-        constexpr std::ptrdiff_t dwViewMatrix = 0x2567FA0;
-        constexpr std::ptrdiff_t dwViewRender = 0x2568968;
-        constexpr std::ptrdiff_t dwWeaponC4 = 0x24C6AF0;
+        constexpr std::ptrdiff_t dwGameRules = 0x255BE80;
+        constexpr std::ptrdiff_t dwGlobalVars = 0x2228090;
+        constexpr std::ptrdiff_t dwGlowManager = 0x2558BA0;
+        constexpr std::ptrdiff_t dwLocalPlayerController = 0x25338A8;
+        constexpr std::ptrdiff_t dwLocalPlayerPawn = 0x255C3C8;
+        constexpr std::ptrdiff_t dwPlantedC4 = 0x24C2248;
+        constexpr std::ptrdiff_t dwPrediction = 0x255C2D0;
+        constexpr std::ptrdiff_t dwViewAngles = 0x2572AE8;
+        constexpr std::ptrdiff_t dwViewMatrix = 0x2561CD0;
+        constexpr std::ptrdiff_t dwViewRender = 0x2562698;
+        constexpr std::ptrdiff_t dwWeaponC4 = 0x24C0800;
     }
 
     namespace engine2 {
@@ -40,7 +40,6 @@ namespace off {
         constexpr std::ptrdiff_t dwWindowWidth = 0x91F330;
     }
 
-    //
     namespace inputsystem {
         constexpr std::ptrdiff_t dwInputSystem = 0x46BC0;
     }

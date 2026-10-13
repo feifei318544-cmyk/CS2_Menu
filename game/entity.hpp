@@ -14,6 +14,19 @@ namespace game {
         float x, y, z;
     };
 
+    // 每帧调用一次，刷新 ViewMatrix 和屏幕尺寸
+    void update_frame_cache();
+
+    // 用缓存的 ViewMatrix 转屏幕坐标
+    bool world_to_screen(const Vec3 &world, float &sx, float &sy);
+
+    // 屏幕尺寸
+    float screen_width();
+    float screen_height();
+
+    // 敌人列表缓存，每 N 帧刷新一次
+    const std::vector<std::uintptr_t>& get_pawns_cached();
+
     std::uintptr_t get_controller_by_index(int index);
 
     std::uintptr_t get_pawn_from_controller(std::uintptr_t controller);
@@ -44,4 +57,4 @@ namespace game {
     std::uintptr_t get_controller_from_pawn(std::uintptr_t pawn);
     const char* get_player_name(std::uintptr_t controller);
 
-} // entity.hpp namespace schema
+}

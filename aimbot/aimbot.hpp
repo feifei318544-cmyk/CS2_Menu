@@ -16,7 +16,6 @@ namespace aimbot {
     extern float g_smooth;
 
     extern float g_max_world_dist;
-    extern bool g_require_visible;
 
     /**
      * 每帧调用一次
@@ -24,4 +23,5 @@ namespace aimbot {
      * 返回被锁定的敌人实体地址，0 表示没锁
      */
     std::uintptr_t run_once();
+
 }

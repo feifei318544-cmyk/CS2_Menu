@@ -6,6 +6,7 @@
 #include "imgui_impl_dx11.h"
 #include <atomic>
 
+#include "entity.hpp"
 #include "aimbot/aimbot.hpp"
 #include "visual/visual.hpp"
 #include "menu/menu.hpp"
@@ -82,6 +83,7 @@ long __stdcall my_present(IDXGISwapChain* _this, UINT a, UINT b) {
 
     ImGui_ImplDX11_NewFrame();
     ImGui_ImplWin32_NewFrame();
+    game::update_frame_cache();
     ImGui::NewFrame();
 
     const std::uintptr_t aim_target = aimbot::run_once();

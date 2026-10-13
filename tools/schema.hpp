@@ -14,19 +14,19 @@ namespace schema {
     constexpr std::ptrdiff_t m_vecAbsOrigin = 0xC8;
     constexpr std::ptrdiff_t m_vecOrigin = 0x80;
 
-    // CCSPlayerController (继承自 CBasePlayerController)
+    // CCSPlayerController（继承自 CBasePlayerController）
     constexpr std::ptrdiff_t m_hPlayerPawn = 0x92C;
-    constexpr std::ptrdiff_t m_iszPlayerName = 0x6FC;   // CBasePlayerController
+    constexpr std::ptrdiff_t m_iszPlayerName = 0x6FC;
 
     // C_BasePlayerPawn
     constexpr std::ptrdiff_t v_angle = 0x13A8;
-    constexpr std::ptrdiff_t m_hController = 0x14BC;    // C_BasePlayerPawn
+    constexpr std::ptrdiff_t m_hController = 0x14BC;
 
     // C_CSPlayerPawn
-    constexpr std::ptrdiff_t m_angEyeAngles = 0x35F0;
+    constexpr std::ptrdiff_t m_angEyeAngles = 0x3600;
     constexpr std::ptrdiff_t m_entitySpottedState = 0x1E88;
 
-    // EntitySpottedState_t 里的子结构（绝对偏移 = m_entitySpottedState + 这个值）
+    // EntitySpottedState_t 的子结构
     constexpr std::ptrdiff_t m_bSpotted = 0x8;
     constexpr std::ptrdiff_t m_bSpottedByMask = 0xC;
 }
