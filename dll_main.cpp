@@ -109,6 +109,9 @@ long __stdcall my_present(IDXGISwapChain *_this, UINT a, UINT b) {
         ImGui_ImplWin32_Init(g_hwnd);
         ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dContext);
 
+        // 装一次子弹追踪 hook（此刻 client.dll 必定已加载完）
+        aimbot::install_silent_hook();
+
         g_inited.store(true);
     }
 
@@ -144,22 +147,32 @@ long __stdcall my_present(IDXGISwapChain *_this, UINT a, UINT b) {
     io.MouseDrawCursor = g_menu_open;
 
     game::update_frame_cache();
+
+    if (menu::g_rcs_enabled) {
+        game::update_rcs(menu::g_rcs_smooth);
+    }
+
     ImGui::NewFrame();
 
     const std::uintptr_t aim_target = aimbot::run_once();
 
-    if (aimbot::g_enabled) {
+    // 暴力自瞄或子弹追踪任一开启，都画同一个瞄准圆
+    if (aimbot::g_enabled || aimbot::g_silent_enabled) {
         visual::draw_aim_circle(aimbot::g_circle_radius);
         visual::draw_target_marker(aim_target);
     }
 
-    visual::draw_esp();
+    // 绘制欢迎文字
+    visual::draw_welcome_text();
+
+    visual::draw_esp();       // 敌人 ESP（受 g_esp_enabled 控制）
+    visual::draw_c4_indicator(); // C4（受 g_esp_show_c4 控制，独立）
+    visual::draw_radar();     // 雷达
 
     if (g_menu_open) {
         menu::draw();
     }
 
-    ImGui::End();
     ImGui::Render();
 
     if (g_mainRTV) {

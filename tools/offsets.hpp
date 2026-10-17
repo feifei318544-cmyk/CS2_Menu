@@ -19,6 +19,7 @@ namespace off {
         constexpr std::ptrdiff_t dwViewMatrix = 0x256B020; // 视图矩阵偏移
         constexpr std::ptrdiff_t dwViewRender = 0x256B9E8; // 视图渲染偏移
         constexpr std::ptrdiff_t dwWeaponC4 = 0x24C9B30; // C4 武器偏移
+        constexpr std::ptrdiff_t dwFillUserCmd = 0xCFA6B0; // 兜底：特征码失效时的历史 RVA
     }
 
     namespace engine2 {

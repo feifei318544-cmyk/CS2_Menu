@@ -56,6 +56,11 @@ namespace schema {
     constexpr std::ptrdiff_t m_pWeaponServices = 0x12F0; // 武器服务
     constexpr std::ptrdiff_t m_pObserverServices = 0x1308; // 观察者服务
 
+    // CPlayer_ObserverServices
+    constexpr std::ptrdiff_t m_iObserverMode = 0x48;    // uint8 观察模式
+    constexpr std::ptrdiff_t m_hObserverTarget = 0x4C;  // CHandle 观察目标
+
+
     // C_CSPlayerPawn
     constexpr std::ptrdiff_t m_pAimPunchServices = 0x1598; // 后坐力服务
     constexpr std::ptrdiff_t m_angEyeAngles = 0x3600; // 眼睛角度
@@ -70,6 +75,14 @@ namespace schema {
     constexpr std::ptrdiff_t m_bIsWalking = 0x1E78; // 是否在走路
     constexpr std::ptrdiff_t m_flVelocityModifier = 0x1EB8; // 速度倍率
     constexpr std::ptrdiff_t m_iIDEntIndex = 0x36DC; // 目标实体索引
+    constexpr std::ptrdiff_t m_pCameraServices = 0x1328; // 相机服务
+
+    // CCSPlayerBase_CameraServices
+    constexpr std::ptrdiff_t m_iFOV = 0x298; // FOV 偏移
+
+    // C_CSPlayerPawn
+    constexpr std::ptrdiff_t m_flViewmodelFOV = 0x1DC8;
+
 
     // CCSPlayer_AimPunchServices
     constexpr std::ptrdiff_t m_predictableBaseTick = 0x48; // 预测基准 tick
@@ -112,5 +125,14 @@ namespace schema {
     constexpr std::ptrdiff_t m_AttributeManager = 0x1290; // 属性管理器
 
     // entity list chunk 步长，固定 0x70
-    constexpr std::uintptr_t kEntityStep = 0x70; // chunk 步长
+    constexpr std::uintptr_t kEntityStep = 0x70;
+
+    // C_PlantedC4
+    constexpr std::ptrdiff_t m_nBombSite = 0x128C; // int32
+    constexpr std::ptrdiff_t m_bBeingDefused = 0x12C4; // bool
+    constexpr std::ptrdiff_t m_bBombDefused = 0x12DC; // bool
+    constexpr std::ptrdiff_t m_flC4Blow = 0x12B8; // GameTime_t
+
+    // 可见性检查函数 RVA（client.dll 内偏移）
+    constexpr std::uintptr_t kIsVisibleRva = 0xB00160;
 }
