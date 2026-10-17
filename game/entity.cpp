@@ -477,45 +477,35 @@ namespace game {
         if (!local_pawn || !target_pawn) return false;
         if (local_pawn == target_pawn) return false;
 
-        using IsVisibleFn = bool(*)(void *, void *, int);
+        // 使用我们验证过的 4 个参数签名
+        using IsVisibleFn = bool(*)(void *, void *, int, void *);
         static IsVisibleFn fn = nullptr;
         static bool fn_initialized = false;
 
         if (!fn_initialized) {
             fn_initialized = true;
-            uintptr_t fn_addr = 0;
 
-            // 1. 使用基于你内存截图提取的 20 字节唯一特征码
-            const char* sig = "48 89 5C 24 ? 48 89 74 24 ? 57 48 83 EC ? 48 8B 02 48 8B F1 48 8B FA 41 8B E8";
-
-            uintptr_t scan_result = Scanner::scan_text_section("client.dll", sig);
-
-            if (scan_result) {
-                fn_addr = scan_result;
-            }
-
-            // 2. 如果特征码出问题（几乎不可能），用 0xB00160 绝对兜底
-            if (!fn_addr) {
-                fn_addr = tools::mem::client_base() + 0xB00160;
-            }
-
-            // 3. 最终安全校验
-            if (fn_addr) {
-                uint8_t* check = reinterpret_cast<uint8_t*>(fn_addr);
-                // 确保函数开头是 48 89 5C 24 (mov [rsp+..], rbx)
-                if (check[0] == 0x48 && check[1] == 0x89 && check[2] == 0x5C) {
-                    fn = reinterpret_cast<IsVisibleFn>(fn_addr);
-                }
+            // 直接使用 RVA 获取地址，不再扫描！
+            const std::uintptr_t base = tools::mem::client_base();
+            if (base) {
+                uintptr_t fn_addr = base + schema::kIsVisibleRva; // 也就是 + 0xB00160
+                fn = reinterpret_cast<IsVisibleFn>(fn_addr);
             }
         }
 
-        if (!fn) return true; // 找不到就默认全可见，防崩溃
+        if (!fn) return true; // 如果没拿到地址，默认全可见防崩溃
+
+        // 安全的 Trace 缓冲区
+        char trace_buffer[0x200] = { 0 };
 
         __try {
+            // 传入安全的掩码 (0x1C1003) 和缓冲区指针，防止引擎内部访问空指针
             return fn(reinterpret_cast<void *>(local_pawn),
                       reinterpret_cast<void *>(target_pawn),
-                      0);
+                      0x1C1003,
+                      trace_buffer);
         } __except (EXCEPTION_EXECUTE_HANDLER) {
+            // 如果游戏版本更新导致函数改变，捕捉异常返回 false
             return false;
         }
     }
