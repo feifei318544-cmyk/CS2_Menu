@@ -88,10 +88,15 @@ Index of this file:
 #include <assert.h>
 #define IM_ASSERT(_EXPR)            assert(_EXPR)                               // You can override the default assert handler by editing imconfig.h
 
+
+
 #endif
 #define IM_ARRAYSIZE(_ARR)          ((int)(sizeof(_ARR) / sizeof(*(_ARR))))     // Size of a static C-style array. Don't use on pointers!
 
+
+
 #define IM_UNUSED(_VAR)             ((void)(_VAR))                              // Used to silence "unused variable warnings". Often useful as asserts may be stripped out from final builds.
+
 
 
 // Check that version and structures layouts are matching between compiled imgui code and caller. Read comments above DebugCheckVersionAndDataLayout() for details.
@@ -125,6 +130,8 @@ Index of this file:
 #pragma warning (push)
 #pragma warning (disable: 26495)    // [Static Analyzer] Variable 'XXX' is uninitialized. Always initialize a member variable (type.6).
 
+
+
 #endif
 #if defined(__clang__)
 #pragma clang diagnostic push
@@ -135,15 +142,23 @@ Index of this file:
 #pragma clang diagnostic ignored "-Wold-style-cast"
 #pragma clang diagnostic ignored "-Wfloat-equal"                    // warning: comparing floating point with == or != is unsafe
 
+
+
 #pragma clang diagnostic ignored "-Wzero-as-null-pointer-constant"
 #pragma clang diagnostic ignored "-Wreserved-identifier"            // warning: identifier '_Xxx' is reserved because it starts with '_' followed by a capital letter
 
+
+
 #pragma clang diagnostic ignored "-Wunsafe-buffer-usage"            // warning: 'xxx' is an unsafe pointer used for buffer access
+
+
 
 #elif defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpragmas"          // warning: unknown option after '#pragma GCC diagnostic' kind
 #pragma GCC diagnostic ignored "-Wclass-memaccess"  // [__GNUC__ >= 8] warning: 'memset/memcpy' clearing/writing an object of type 'xxxx' with no trivial copy-assignment; use assignment or value-initialization instead
+
+
 
 #endif
 
@@ -285,6 +300,8 @@ typedef unsigned int ImWchar32;
 typedef unsigned short ImWchar16;
 // A single decoded U16 character/code point. We encode them as multi bytes UTF-8 when used in strings.
 #ifdef IMGUI_USE_WCHAR32            // ImWchar [configurable type: override in imconfig.h with '#define IMGUI_USE_WCHAR32' to support Unicode planes 1-16]
+
+
 
 typedef ImWchar32 ImWchar;
 #else
@@ -1947,6 +1964,8 @@ enum ImGuiDragDropFlags_ {
 // Standard Drag and Drop payload types. You can define you own payload types using short strings. Types starting with '_' are defined by Dear ImGui.
 #define IMGUI_PAYLOAD_TYPE_COLOR_3F     "_COL3F"    // float[3]: Standard type for colors, without alpha. User code may use this type.
 
+
+
 #define IMGUI_PAYLOAD_TYPE_COLOR_4F     "_COL4F"    // float[4]: Standard type for colors. User code may use this type.
 
 // A primary data type
@@ -2910,16 +2929,18 @@ struct ImVector {
     inline T *find(const T &v) {
         T *data = Data;
         const T *data_end = Data + Size;
-        while (data < data_end) if (*data == v) break;
-        else ++data;
+        while (data < data_end)
+            if (*data == v) break;
+            else ++data;
         return data;
     }
 
     inline const T *find(const T &v) const {
         const T *data = Data;
         const T *data_end = Data + Size;
-        while (data < data_end) if (*data == v) break;
-        else ++data;
+        while (data < data_end)
+            if (*data == v) break;
+            else ++data;
         return data;
     }
 

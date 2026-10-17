@@ -8,9 +8,9 @@ namespace tools::mem {
     // 获取模块基址
     std::uintptr_t get_module_base(const char *module_name);
 
-    std::uintptr_t client_base();
+    std::uintptr_t client_base(); // 取 client.dll 基址
 
-    std::uintptr_t engine_base();
+    std::uintptr_t engine_base(); // 取 engine2.dll 基址
 
     /*
      * 安全的读取函数
@@ -21,7 +21,7 @@ namespace tools::mem {
     T read(std::uintptr_t addr) {
         if (!addr) return T{};
 
-        MEMORY_BASIC_INFORMATION mbi{};
+        MEMORY_BASIC_INFORMATION mbi{}; // 内存信息
         if (!VirtualQuery(reinterpret_cast<LPCVOID>(addr), &mbi, sizeof(mbi)))
             return T{};
 
@@ -45,7 +45,7 @@ namespace tools::mem {
     bool write(std::uintptr_t addr, const T &val) {
         if (!addr) return false;
 
-        MEMORY_BASIC_INFORMATION mbi{};
+        MEMORY_BASIC_INFORMATION mbi{}; // 内存信息
         if (!VirtualQuery(reinterpret_cast<LPCVOID>(addr), &mbi, sizeof(mbi)))
             return false;
 
@@ -60,4 +60,9 @@ namespace tools::mem {
         std::memcpy(reinterpret_cast<void *>(addr), &val, sizeof(T));
         return true;
     }
+}
+
+    template<typename T>
+    inline T read_fast(std::uintptr_t addr) {
+    return *reinterpret_cast<const T *>(addr); // 直接解引用
 }

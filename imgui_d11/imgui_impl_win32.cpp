@@ -98,10 +98,14 @@ typedef DWORD (WINAPI*PFN_XInputGetState)(DWORD, XINPUT_STATE *);
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wcast-function-type"     // warning: cast between incompatible function types (for loader)
 
+
+
 #endif
 #if defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-function-type"       // warning: cast between incompatible function types (for loader)
+
+
 
 #endif
 
@@ -786,7 +790,10 @@ static BOOL _IsWindowsVersionOrGreater(WORD major, WORD minor, WORD) {
 #define _IsWindows8OrGreater()       _IsWindowsVersionOrGreater(HIBYTE(0x0602), LOBYTE(0x0602), 0) // _WIN32_WINNT_WIN8
 #define _IsWindows8Point1OrGreater() _IsWindowsVersionOrGreater(HIBYTE(0x0603), LOBYTE(0x0603), 0) // _WIN32_WINNT_WINBLUE
 
+
+
 #define _IsWindows10OrGreater()      _IsWindowsVersionOrGreater(HIBYTE(0x0A00), LOBYTE(0x0A00), 0) // _WIN32_WINNT_WINTHRESHOLD / _WIN32_WINNT_WIN10
+
 
 
 #ifndef DPI_ENUMS_DECLARED

@@ -12,12 +12,12 @@
 #include "menu/menu.hpp"
 #include "tools/console.hpp"
 
-static ID3D11Device* g_pd3dDevice = nullptr;
-static IDXGISwapChain* g_pSwapChain = nullptr;
-static ID3D11DeviceContext* g_pd3dContext = nullptr;
-static ID3D11RenderTargetView* g_mainRTV = nullptr;
+static ID3D11Device *g_pd3dDevice = nullptr;
+static IDXGISwapChain *g_pSwapChain = nullptr;
+static ID3D11DeviceContext *g_pd3dContext = nullptr;
+static ID3D11RenderTargetView *g_mainRTV = nullptr;
 static HWND g_hwnd = nullptr;
-static void* origin_present = nullptr;
+static void *origin_present = nullptr;
 static WNDPROC origin_wndProc = nullptr;
 static bool g_menu_open = true;
 static bool g_insert_prev = false;
@@ -25,9 +25,9 @@ static std::atomic<bool> g_inited{false};
 
 // 卸载相关
 static std::atomic<bool> g_unloading{false};
-static std::atomic<int>  g_present_depth{0};
+static std::atomic<int> g_present_depth{0};
 
-using Present = HRESULT(__stdcall*)(IDXGISwapChain*, UINT, UINT);
+using Present = HRESULT(__stdcall*)(IDXGISwapChain *, UINT, UINT);
 
 extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
 
@@ -45,11 +45,10 @@ LRESULT __stdcall WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
 
-long __stdcall my_present(IDXGISwapChain* _this, UINT a, UINT b) {
-
+long __stdcall my_present(IDXGISwapChain *_this, UINT a, UINT b) {
     // 已经在卸载流程里，直接走原始 Present，不碰 ImGui
     if (g_unloading.load()) {
-        return ((Present)origin_present)(_this, a, b);
+        return ((Present) origin_present)(_this, a, b);
     }
 
     // 进入 Present，计数 +1
@@ -70,28 +69,28 @@ long __stdcall my_present(IDXGISwapChain* _this, UINT a, UINT b) {
         g_present_depth.fetch_sub(1);
 
         // 调原始 Present 后返回
-        return ((Present)origin_present)(_this, a, b);
+        return ((Present) origin_present)(_this, a, b);
     }
 
     if (!g_inited.load()) {
-        _this->GetDevice(__uuidof(ID3D11Device), (void**)&g_pd3dDevice);
+        _this->GetDevice(__uuidof(ID3D11Device), (void **) &g_pd3dDevice);
         g_pd3dDevice->GetImmediateContext(&g_pd3dContext);
 
         DXGI_SWAP_CHAIN_DESC sd;
         _this->GetDesc(&sd);
         g_hwnd = sd.OutputWindow;
 
-        ID3D11Texture2D* buf = nullptr;
-        _this->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&buf);
+        ID3D11Texture2D *buf = nullptr;
+        _this->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **) &buf);
         g_pd3dDevice->CreateRenderTargetView(buf, nullptr, &g_mainRTV);
         buf->Release();
 
-        origin_wndProc = (WNDPROC)SetWindowLongPtr(
-            g_hwnd, GWLP_WNDPROC, (LONG_PTR)WndProc);
+        origin_wndProc = (WNDPROC) SetWindowLongPtr(
+            g_hwnd, GWLP_WNDPROC, (LONG_PTR) WndProc);
 
         ImGui::CreateContext();
 
-        ImGuiIO& io = ImGui::GetIO();
+        ImGuiIO &io = ImGui::GetIO();
         ImFontConfig cfg;
         cfg.OversampleH = 2;
         cfg.OversampleV = 2;
@@ -105,7 +104,7 @@ long __stdcall my_present(IDXGISwapChain* _this, UINT a, UINT b) {
             0,
         };
         io.Fonts->AddFontFromFileTTF(
-            R"(C:\Windows\Fonts\msyh.ttc)", 18.0f, &cfg, ranges);
+            R"(C:\Windows\Fonts\msyh.ttc)", 22.0f, &cfg, ranges);
 
         ImGui_ImplWin32_Init(g_hwnd);
         ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dContext);
@@ -128,11 +127,11 @@ long __stdcall my_present(IDXGISwapChain* _this, UINT a, UINT b) {
         } else {
             RECT rect;
             GetClientRect(g_hwnd, &rect);
-            POINT tl{ rect.left, rect.top };
-            POINT br{ rect.right, rect.bottom };
+            POINT tl{rect.left, rect.top};
+            POINT br{rect.right, rect.bottom};
             ClientToScreen(g_hwnd, &tl);
             ClientToScreen(g_hwnd, &br);
-            RECT clip{ tl.x, tl.y, br.x, br.y };
+            RECT clip{tl.x, tl.y, br.x, br.y};
             ClipCursor(&clip);
         }
         g_last_menu_state = g_menu_open;
@@ -141,7 +140,7 @@ long __stdcall my_present(IDXGISwapChain* _this, UINT a, UINT b) {
     ImGui_ImplDX11_NewFrame();
     ImGui_ImplWin32_NewFrame();
 
-    ImGuiIO& io = ImGui::GetIO();
+    ImGuiIO &io = ImGui::GetIO();
     io.MouseDrawCursor = g_menu_open;
 
     game::update_frame_cache();
@@ -170,7 +169,7 @@ long __stdcall my_present(IDXGISwapChain* _this, UINT a, UINT b) {
 
     g_present_depth.fetch_sub(1);
 
-    return ((Present)origin_present)(_this, a, b);
+    return ((Present) origin_present)(_this, a, b);
 }
 
 // 清理线程：等所有 Present 退出后卸载 DLL
@@ -189,7 +188,7 @@ static DWORD WINAPI cleanup_thread(LPVOID) {
 
     // 4. 恢复 WndProc
     if (origin_wndProc && g_hwnd) {
-        SetWindowLongPtr(g_hwnd, GWLP_WNDPROC, (LONG_PTR)origin_wndProc);
+        SetWindowLongPtr(g_hwnd, GWLP_WNDPROC, (LONG_PTR) origin_wndProc);
         origin_wndProc = nullptr;
     }
 
@@ -202,8 +201,14 @@ static DWORD WINAPI cleanup_thread(LPVOID) {
     }
 
     // 6. 释放自己创建的 D3D11 资源
-    if (g_mainRTV) { g_mainRTV->Release(); g_mainRTV = nullptr; }
-    if (g_pd3dContext) { g_pd3dContext->Release(); g_pd3dContext = nullptr; }
+    if (g_mainRTV) {
+        g_mainRTV->Release();
+        g_mainRTV = nullptr;
+    }
+    if (g_pd3dContext) {
+        g_pd3dContext->Release();
+        g_pd3dContext = nullptr;
+    }
     // 注意：g_pd3dDevice 和 g_pSwapChain 是游戏自己的，不要 Release
 
     // 7. 彻底移除 hook
@@ -219,7 +224,7 @@ static DWORD WINAPI cleanup_thread(LPVOID) {
     GetModuleHandleExA(
         GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
         GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-        (LPCSTR)&cleanup_thread, &hSelf);
+        (LPCSTR) &cleanup_thread, &hSelf);
 
     if (hSelf) {
         FreeLibraryAndExitThread(hSelf, 0);
@@ -240,13 +245,13 @@ DWORD WINAPI create(LPVOID) {
         0, 0, 100, 100, nullptr, nullptr, nullptr, nullptr);
 
     DXGI_SWAP_CHAIN_DESC sd{};
-    sd.BufferCount        = 1;
-    sd.BufferDesc.Format  = DXGI_FORMAT_R8G8B8A8_UNORM;
-    sd.BufferUsage        = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    sd.OutputWindow       = tmp;
-    sd.SampleDesc.Count   = 1;
-    sd.Windowed           = TRUE;
-    sd.SwapEffect         = DXGI_SWAP_EFFECT_DISCARD;
+    sd.BufferCount = 1;
+    sd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    sd.OutputWindow = tmp;
+    sd.SampleDesc.Count = 1;
+    sd.Windowed = TRUE;
+    sd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
 
     HRESULT hr = D3D11CreateDeviceAndSwapChain(
         nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0,
@@ -256,21 +261,27 @@ DWORD WINAPI create(LPVOID) {
 
     if (FAILED(hr) || !g_pSwapChain) {
         if (tmp) DestroyWindow(tmp);
-        if (g_pd3dDevice)  { g_pd3dDevice->Release();  g_pd3dDevice  = nullptr; }
-        if (g_pSwapChain)  { g_pSwapChain->Release();  g_pSwapChain  = nullptr; }
+        if (g_pd3dDevice) {
+            g_pd3dDevice->Release();
+            g_pd3dDevice = nullptr;
+        }
+        if (g_pSwapChain) {
+            g_pSwapChain->Release();
+            g_pSwapChain = nullptr;
+        }
         return 0;
     }
 
-    void** vtable = *reinterpret_cast<void***>(g_pSwapChain);
-    void*  present = vtable[8];
-
-    MH_RemoveHook(present);
+    void **vtable = *reinterpret_cast<void ***>(g_pSwapChain);
+    void *present = vtable[8];
 
     MH_STATUS st = MH_CreateHook(present, LPVOID(my_present), &origin_present);
     if (st != MH_OK) {
         if (tmp) DestroyWindow(tmp);
-        g_pd3dDevice->Release();  g_pd3dDevice  = nullptr;
-        g_pSwapChain->Release();  g_pSwapChain  = nullptr;
+        g_pd3dDevice->Release();
+        g_pd3dDevice = nullptr;
+        g_pSwapChain->Release();
+        g_pSwapChain = nullptr;
         return 0;
     }
 
@@ -278,15 +289,19 @@ DWORD WINAPI create(LPVOID) {
     if (st != MH_OK) {
         MH_RemoveHook(present);
         if (tmp) DestroyWindow(tmp);
-        g_pd3dDevice->Release();  g_pd3dDevice  = nullptr;
-        g_pSwapChain->Release();  g_pSwapChain  = nullptr;
+        g_pd3dDevice->Release();
+        g_pd3dDevice = nullptr;
+        g_pSwapChain->Release();
+        g_pSwapChain = nullptr;
         return 0;
     }
 
     if (tmp) DestroyWindow(tmp);
 
-    g_pd3dDevice->Release();  g_pd3dDevice  = nullptr;
-    g_pSwapChain->Release();  g_pSwapChain  = nullptr;
+    g_pd3dDevice->Release();
+    g_pd3dDevice = nullptr;
+    g_pSwapChain->Release();
+    g_pSwapChain = nullptr;
 
     return 0;
 }
