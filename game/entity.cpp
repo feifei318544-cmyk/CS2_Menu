@@ -673,18 +673,22 @@ namespace game {
     Vec3 get_c4_origin(std::uintptr_t c4) {
         if (!c4) return {};
 
-        Vec3 pos = get_origin(c4); // 先试 m_vecAbsOrigin
+        // 1. 尝试直接读取实体自身的绝对坐标（安放或掉落时通常能读到）
+        Vec3 pos = get_origin(c4);
         if (pos.x != 0.0f || pos.y != 0.0f || pos.z != 0.0f) return pos;
 
-        const std::uintptr_t node = tools::mem::read_raw<std::uintptr_t>(
-            c4 + schema::m_pGameSceneNode); // 量化坐标，相对场景节点
+        const std::uintptr_t node = tools::mem::read_raw<std::uintptr_t>(c4 + schema::m_pGameSceneNode);
         if (node) {
+            // 直接读节点里面的绝对世界坐标
+            pos = tools::mem::read_raw<Vec3>(node + schema::m_vecAbsOrigin);
+            if (pos.x != 0.0f || pos.y != 0.0f || pos.z != 0.0f) return pos;
+
+            // 再兜底读相对坐标
             pos = tools::mem::read_raw<Vec3>(node + schema::m_vecOrigin);
             if (pos.x != 0.0f || pos.y != 0.0f || pos.z != 0.0f) return pos;
         }
 
-        pos = tools::mem::read_raw<Vec3>(c4 + schema::m_vecAbsOrigin); // 兜底：有些 C4 直接把坐标放在实体自身
-        return pos;
+        return {}; // 如果都读不到（比如 C4 在玩家背包里），返回空坐标
     }
 
     // 角度归一化

@@ -67,56 +67,51 @@ namespace visual {
                     "已锁定"); // 锁定标记
     }
 
-    void draw_c4_indicator() {
-        if (!g_esp_show_c4) return; // C4 显示没开
+        void draw_c4_indicator() {
+        if (!g_esp_enabled || !g_esp_show_c4) return; // 加上总开关
 
-        const std::vector<std::uintptr_t> &c4_list = game::get_c4_cached(); // 所有 C4（缓存）
+        const std::vector<std::uintptr_t> &c4_list = game::get_c4_cached();
         if (c4_list.empty()) return;
 
-        const float sw = game::screen_width(); // 屏幕宽
-        const float sh = game::screen_height(); // 屏幕高
-
-        ImDrawList *dl = ImGui::GetBackgroundDrawList(); // 背景绘制列表
+        const float sw = game::screen_width();
+        const float sh = game::screen_height();
+        ImDrawList *dl = ImGui::GetBackgroundDrawList();
         if (!dl) return;
 
-        // 屏幕上方居中提示条（只画一条）
-        for (std::uintptr_t c4: c4_list) {
-            const game::Vec3 c4_pos = game::get_c4_origin(c4); // C4 世界坐标（带兜底）
+        // 顶部提示条（只画一条）
+        for (std::uintptr_t c4 : c4_list) {
+            const game::Vec3 c4_pos = game::get_c4_origin(c4);
             const bool has_pos = !(c4_pos.x == 0.0f && c4_pos.y == 0.0f && c4_pos.z == 0.0f);
 
-            // 读 C4 状态
-            const int bomb_site = tools::mem::read_raw<int>(c4 + schema::m_nBombSite); // 炸弹点
-            const bool being_defused = tools::mem::read_raw<bool>(c4 + schema::m_bBeingDefused); // 是否在拆弹
-            const bool bomb_defused = tools::mem::read_raw<bool>(c4 + schema::m_bBombDefused); // 是否已拆解
+            const int bomb_site = tools::mem::read_raw<int>(c4 + schema::m_nBombSite);
+            const bool being_defused = tools::mem::read_raw<bool>(c4 + schema::m_bBeingDefused);
+            const bool bomb_defused = tools::mem::read_raw<bool>(c4 + schema::m_bBombDefused);
 
-            // C4 显示名：没有坐标说明在玩家身上
-            char name[64] = "C4"; // 默认名
-            if (!has_pos) std::snprintf(name, sizeof(name), "C4 在玩家身上");
+            char name[64] = "C4";
+            // 【修复】如果读不到坐标，大概率在玩家身上或者被销毁了
+            if (!has_pos) std::snprintf(name, sizeof(name), "C4 在玩家身上/未安放");
             else if (bomb_defused) std::snprintf(name, sizeof(name), "C4 已拆解");
             else if (being_defused) std::snprintf(name, sizeof(name), "C4 正在拆弹");
             else if (bomb_site == 0) std::snprintf(name, sizeof(name), "C4 - A 点");
             else if (bomb_site == 1) std::snprintf(name, sizeof(name), "C4 - B 点");
 
-            // 屏幕上方居中提示条
-            const float tw = ImGui::CalcTextSize(name).x; // 文本宽度
-            const float bar_x = (sw - tw) * 0.5f; // 居中 x
-            const float bar_y = 60.0f; // 顶部 y
+            const float tw = ImGui::CalcTextSize(name).x;
+            const float bar_x = (sw - tw) * 0.5f;
+            const float bar_y = 60.0f;
 
             dl->AddRectFilled(
                 ImVec2(bar_x - 10.0f, bar_y - 5.0f),
                 ImVec2(bar_x + tw + 10.0f, bar_y + 20.0f),
-                IM_COL32(255, 0, 0, 180), 4.0f); // 提示条背景
+                IM_COL32(255, 0, 0, 180), 4.0f);
 
-            dl->AddText(ImVec2(bar_x, bar_y),
-                        IM_COL32(255, 255, 255, 255), name); // 提示条文本
-
-            break; // 提示条只画一条
+            dl->AddText(ImVec2(bar_x, bar_y), IM_COL32(255, 255, 255, 255), name);
+            break; // 只画一条
         }
 
-        // 视野内：每个有坐标的 C4 位置画圈 + 名字
-        for (std::uintptr_t c4: c4_list) {
-            const game::Vec3 c4_pos = game::get_c4_origin(c4); // C4 世界坐标（带兜底）
-            if (c4_pos.x == 0.0f && c4_pos.y == 0.0f && c4_pos.z == 0.0f) continue; // 身上 C4 没坐标
+        // 视野内画圈
+        for (std::uintptr_t c4 : c4_list) {
+            const game::Vec3 c4_pos = game::get_c4_origin(c4);
+            if (c4_pos.x == 0.0f && c4_pos.y == 0.0f && c4_pos.z == 0.0f) continue; // 身上没坐标跳过
 
             const int bomb_site = tools::mem::read_raw<int>(c4 + schema::m_nBombSite); // 炸弹点
             const bool being_defused = tools::mem::read_raw<bool>(c4 + schema::m_bBeingDefused); // 是否在拆弹

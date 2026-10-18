@@ -191,14 +191,20 @@ namespace menu {
                     ImGui::Checkbox("开启绘制", &visual::g_esp_enabled);
 
                     ImGui::BeginDisabled(!visual::g_esp_enabled);
-                    ImGui::Checkbox("显示血量", &visual::g_esp_show_health); ImGui::SameLine(0, 20.0f);
-                    ImGui::Checkbox("显示射线", &visual::g_esp_show_ray); ImGui::SameLine(0, 20.0f);
-                    ImGui::Checkbox("显示名称", &visual::g_esp_show_name); ImGui::SameLine(0, 20.0f);
+                    ImGui::Checkbox("显示血量", &visual::g_esp_show_health);
+                    ImGui::SameLine(0, 20.0f);
+                    ImGui::Checkbox("显示射线", &visual::g_esp_show_ray);
+                    ImGui::SameLine(0, 20.0f);
+                    ImGui::Checkbox("显示名称", &visual::g_esp_show_name);
+                    ImGui::SameLine(0, 20.0f);
                     ImGui::Checkbox("显示骨骼", &visual::g_esp_show_skeleton);
 
-                    ImGui::Checkbox("显示武器", &visual::g_esp_show_weapon); ImGui::SameLine(0, 20.0f);
-                    ImGui::Checkbox("显示距离", &visual::g_esp_show_distance); ImGui::SameLine(0, 20.0f);
-                    ImGui::Checkbox("显示护甲", &visual::g_esp_show_armor); ImGui::SameLine(0, 20.0f);
+                    ImGui::Checkbox("显示武器", &visual::g_esp_show_weapon);
+                    ImGui::SameLine(0, 20.0f);
+                    ImGui::Checkbox("显示距离", &visual::g_esp_show_distance);
+                    ImGui::SameLine(0, 20.0f);
+                    ImGui::Checkbox("显示护甲", &visual::g_esp_show_armor);
+                    ImGui::SameLine(0, 20.0f);
                     ImGui::Checkbox("显示头盔", &visual::g_esp_show_helmet);
                     ImGui::Checkbox("显示 C4", &visual::g_esp_show_c4);
 
