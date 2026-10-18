@@ -148,8 +148,9 @@ long __stdcall my_present(IDXGISwapChain *_this, UINT a, UINT b) {
 
     game::update_frame_cache();
 
-    if (menu::g_rcs_enabled) {
-        game::update_rcs(menu::g_rcs_smooth);
+    // 只有选择了模式 1（视觉压枪），才调用视觉压枪函数
+    if (menu::g_rcs_mode == 1) {
+        game::update_rcs_visual();
     }
 
     ImGui::NewFrame();

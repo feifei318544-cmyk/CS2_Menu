@@ -5,8 +5,7 @@
 
 namespace menu {
     bool g_unload_requested = false;
-    bool g_rcs_enabled = false;
-    float g_rcs_smooth = 0.7f;
+    int g_rcs_mode = 0; // 0 关闭, 1 视觉, 2 指令
 
     void draw() {
         static bool style_done = false;
@@ -101,10 +100,6 @@ namespace menu {
                         aimbot::g_enabled = false;
                     }
 
-                    ImGui::Spacing();
-                    ImGui::TextColored(ImVec4(0.8f, 0.8f, 1.0f, 1.0f), "瞄准参数");
-                    ImGui::Separator();
-
                     const bool any_aim = aimbot::g_enabled || aimbot::g_silent_enabled;
                     ImGui::BeginDisabled(!any_aim);
                     ImGui::SliderFloat("范围", &aimbot::g_circle_radius, 320.0f, 800.0f, "%.0f px");
@@ -174,14 +169,18 @@ namespace menu {
                     ImGui::Separator();
                     ImGui::Spacing();
 
+                    // 后坐力控制区域
                     ImGui::TextColored(ImVec4(0.5f, 0.8f, 1.0f, 1.0f), "后坐力控制 (RCS)");
                     ImGui::Separator();
-                    ImGui::Checkbox("开启独立无后座(RCS)", &g_rcs_enabled);
-                    ImGui::BeginDisabled(!g_rcs_enabled);
-                    ImGui::SliderFloat("压枪平滑度", &g_rcs_smooth, 0.1f, 2.0f, "%.1f");
-                    ImGui::TextDisabled("数值建议为0.7");
-                    ImGui::TextDisabled("1.0 为标准值，过大准星会往地上栽");
-                    ImGui::EndDisabled();
+
+                    if (ImGui::RadioButton("关闭", g_rcs_mode == 0)) g_rcs_mode = 0;
+                    ImGui::SameLine(0, 20.0f);
+                    if (ImGui::RadioButton("自动压枪 (视觉回正)", g_rcs_mode == 1)) g_rcs_mode = 1;
+                    ImGui::SameLine(0, 20.0f);
+                    if (ImGui::RadioButton("完美无后座 (指令修正)", g_rcs_mode == 2)) g_rcs_mode = 2;
+
+                    ImGui::TextDisabled("视觉回正：屏幕准星不动，适合自己看");
+                    ImGui::TextDisabled("指令修正：子弹精准打在准星上，屏幕可能略微上跳");
                     ImGui::Spacing();
                 }
 

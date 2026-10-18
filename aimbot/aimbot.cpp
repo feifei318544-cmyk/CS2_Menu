@@ -10,6 +10,7 @@
 #include <limits>
 #include <vector>
 
+#include "menu.hpp"
 #include "MinHook.h"
 
 namespace aimbot {
@@ -59,15 +60,44 @@ namespace aimbot {
     using FillUserCmdFn = __int64(*)(int *a1, __int64 a2);
     FillUserCmdFn oFillUserCmd = nullptr;
 
+    // 你的原版 Hook 签名
     __int64 __fastcall hkFillUserCmd(int *a1, __int64 a2) {
         // 防护：防止空指针导致崩溃
         if (!a1) return oFillUserCmd(a1, a2);
 
-        if (g_silent_enabled && g_silent_has_target) {
-            *(float *) ((char *) a1 + 0x10) = g_silent_pitch; // 覆盖源 pitch
-            *(float *) ((char *) a1 + 0x14) = g_silent_yaw;   // 覆盖源 yaw
-            *(float *) ((char *) a1 + 0x18) = 0.0f;           // 清零 roll
+        // 1. 完美无后座 (模式 2) - 最先修正基础视角
+        if (menu::g_rcs_mode == 2) {
+            std::uintptr_t pawn = game::local_player();
+            if (pawn) {
+                int shots_fired = tools::mem::read_raw<int>(pawn + schema::m_iShotsFired);
+                if (shots_fired > 0) {
+                    std::uintptr_t aimPunch = tools::mem::read_raw<std::uintptr_t>(pawn + schema::m_pAimPunchServices);
+                    if (aimPunch) {
+                        float punch_x = tools::mem::read_raw<float>(aimPunch + schema::m_predictableBaseAngle);
+                        float punch_y = tools::mem::read_raw<float>(aimPunch + schema::m_predictableBaseAngle + 4);
+
+                        if (punch_x != 0.0f || punch_y != 0.0f) {
+                            // 防爆盾：保护内存读取
+                            __try {
+                                *(float *) ((char *) a1 + 0x10) -= punch_x * 2.0f; // 扣除垂直后坐力
+                                *(float *) ((char *) a1 + 0x14) -= punch_y * 2.0f; // 扣除水平后坐力
+                            } __except (EXCEPTION_EXECUTE_HANDLER) {}
+                        }
+                    }
+                }
+            }
         }
+
+        // 2. 子弹追踪 (静默自瞄) - 优先级最高，覆盖 RCS 的视角
+        if (g_silent_enabled && g_silent_has_target) {
+            __try {
+                *(float *) ((char *) a1 + 0x10) = g_silent_pitch; // 覆盖源 pitch
+                *(float *) ((char *) a1 + 0x14) = g_silent_yaw;   // 覆盖源 yaw
+                *(float *) ((char *) a1 + 0x18) = 0.0f;           // 清零 roll
+            } __except (EXCEPTION_EXECUTE_HANDLER) {}
+        }
+
+        // 3. 最后执行原函数（保持你原本的优秀写法）
         return oFillUserCmd(a1, a2);
     }
 
@@ -77,7 +107,6 @@ namespace aimbot {
 
         uintptr_t target = 0;
 
-        // 1. 使用我们专属的特征码扫描函数
         for (const char* pattern : kFillUserCmdPatterns) {
             target = Scanner::scan_fill_user_cmd_pattern(pattern);
             if (target) break;
@@ -85,7 +114,6 @@ namespace aimbot {
 
         if (!target) return;
 
-        // 3. 校验并 Hook
         uint8_t* func_start = reinterpret_cast<uint8_t*>(target);
         if (func_start[0] == 0x48 && func_start[1] == 0x89 && func_start[2] == 0x5C && func_start[3] == 0x24) {
             MH_STATUS st = MH_CreateHook((LPVOID) target, (LPVOID) hkFillUserCmd, (LPVOID *) &oFillUserCmd);
@@ -94,6 +122,7 @@ namespace aimbot {
             }
         }
     }
+
 
     // 计算目标角度
     static void calc_angle(const game::Vec3 &local_eye, const game::Vec3 &target_aim, float &pitch, float &yaw) {

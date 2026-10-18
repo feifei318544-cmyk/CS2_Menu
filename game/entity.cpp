@@ -27,7 +27,7 @@ namespace game {
     static std::vector<PawnSnapshot> g_snapshot; // 当前帧快照
 
     // 可见性节流缓存
-    static std::unordered_map<std::uintptr_t, std::pair<int, bool>> g_vis_cache; // 敌人 -> {tick, 是否可见}
+    static std::unordered_map<std::uintptr_t, std::pair<int, bool> > g_vis_cache; // 敌人 -> {tick, 是否可见}
     static int g_vis_tick = 0; // 可见性节流计数
 
     // C4 列表缓存
@@ -42,9 +42,9 @@ namespace game {
             const std::uintptr_t matrix = base + off::client::dwViewMatrix; // 视图矩阵地址
             // 一次读 64 字节，替代 16 次 VirtualQuery
             if (!tools::mem::safe_memcpy(
-                    g_view_matrix,
-                    reinterpret_cast<const void *>(matrix),
-                    sizeof(g_view_matrix))) {
+                g_view_matrix,
+                reinterpret_cast<const void *>(matrix),
+                sizeof(g_view_matrix))) {
                 std::memset(g_view_matrix, 0, sizeof(g_view_matrix)); // 读失败清零
             }
         }
@@ -214,10 +214,10 @@ namespace game {
             for (int slot = 0; slot < 512; ++slot) {
                 std::uintptr_t e = 0; // 当前实体
                 if (!tools::mem::safe_memcpy(
-                        &e,
-                        reinterpret_cast<const void *>(
-                            chunk + schema::kEntityStep * slot),
-                        sizeof(e)))
+                    &e,
+                    reinterpret_cast<const void *>(
+                        chunk + schema::kEntityStep * slot),
+                    sizeof(e)))
                     continue; // 读失败
 
                 if (!e || e < 0x10000 || e >= 0x7FF000000000ULL)
@@ -275,9 +275,9 @@ namespace game {
 
         // 一次读 128 字节，替代 128 次单字符 VirtualQuery
         if (!tools::mem::safe_memcpy(
-                buf,
-                reinterpret_cast<const void *>(controller + schema::m_iszPlayerName),
-                128)) {
+            buf,
+            reinterpret_cast<const void *>(controller + schema::m_iszPlayerName),
+            128)) {
             buf[0] = '\0';
             return buf;
         }
@@ -318,9 +318,9 @@ namespace game {
 
         // 一次读 12 字节（3 个 float）
         if (!tools::mem::safe_memcpy(
-                &out,
-                reinterpret_cast<const void *>(bone_addr),
-                sizeof(Vec3)))
+            &out,
+            reinterpret_cast<const void *>(bone_addr),
+            sizeof(Vec3)))
             return false;
 
         return true;
@@ -359,7 +359,7 @@ namespace game {
         if (!item_services) return false;
 
         return tools::mem::read_raw<std::uint8_t>(
-            item_services + schema::m_bHasHelmet) != 0; // m_bHasHelmet
+                   item_services + schema::m_bHasHelmet) != 0; // m_bHasHelmet
     }
 
     // 武器和距离
@@ -389,8 +389,8 @@ namespace game {
 
         const std::uint16_t def_index = tools::mem::read_raw<std::uint16_t>(
             weapon + schema::m_AttributeManager
-                   + schema::m_Item
-                   + schema::m_iItemDefinitionIndex); // 物品定义索引
+            + schema::m_Item
+            + schema::m_iItemDefinitionIndex); // 物品定义索引
 
         switch (def_index) {
             case 1: return "沙鹰";
@@ -496,7 +496,7 @@ namespace game {
         if (!fn) return true; // 如果没拿到地址，默认全可见防崩溃
 
         // 安全的 Trace 缓冲区
-        char trace_buffer[0x200] = { 0 };
+        char trace_buffer[0x200] = {0};
 
         __try {
             // 传入安全的掩码 (0x1C1003) 和缓冲区指针，防止引擎内部访问空指针
@@ -531,7 +531,7 @@ namespace game {
         const int local_team = get_team(local); // 本地阵营
         const std::vector<std::uintptr_t> &pawns = get_pawns_cached(); // 敌人列表缓存
 
-        for (std::uintptr_t e : pawns) {
+        for (std::uintptr_t e: pawns) {
             if (e == local) continue; // 跳过自己
 
             const int team = get_team(e); // 实体阵营
@@ -598,7 +598,7 @@ namespace game {
 
         for (int group = 0; group < 16; ++group) {
             const std::uintptr_t chunk = tools::mem::read<std::uintptr_t>(
-                    list + 0x10 + 0x8 * group); // 第 group 个 chunk
+                list + 0x10 + 0x8 * group); // 第 group 个 chunk
             if (!chunk) continue;
 
             MEMORY_BASIC_INFORMATION mbi{}; // 内存信息
@@ -609,9 +609,9 @@ namespace game {
             for (int slot = 0; slot < 512; ++slot) {
                 std::uintptr_t e = 0; // 当前实体
                 if (!tools::mem::safe_memcpy(
-                        &e,
-                        reinterpret_cast<const void *>(chunk + schema::kEntityStep * slot),
-                        sizeof(e)))
+                    &e,
+                    reinterpret_cast<const void *>(chunk + schema::kEntityStep * slot),
+                    sizeof(e)))
                     continue;
 
                 if (!e || e < 0x10000 || e >= 0x7FF000000000ULL) continue; // 地址非法
@@ -619,8 +619,8 @@ namespace game {
                 // 读物品定义索引，49 = C4
                 const std::uint16_t def_index = tools::mem::read_raw<std::uint16_t>(
                     e + schema::m_AttributeManager
-                      + schema::m_Item
-                      + schema::m_iItemDefinitionIndex);
+                    + schema::m_Item
+                    + schema::m_iItemDefinitionIndex);
                 if (def_index != 49) continue; // 不是 C4
 
                 result.push_back(e); // 收进结果
@@ -635,7 +635,8 @@ namespace game {
      * 每帧校验缓存地址是否还是 C4，失效立即重扫，保证 C4 掉地/被捡/被安放时实时更新
      */
     const std::vector<std::uintptr_t> &get_c4_cached() {
-        if (g_c4_tick <= 0) { // 缓存过期 → 重新扫
+        if (g_c4_tick <= 0) {
+            // 缓存过期 → 重新扫
             g_c4_cache = get_all_c4(); // 重新扫描
             g_c4_tick = C4_CACHE_INTERVAL; // 重置计数
         }
@@ -643,22 +644,25 @@ namespace game {
 
         bool need_rescan = false; // 是否需要立即重扫
         for (std::uintptr_t c4: g_c4_cache) {
-            if (!c4) { // 空地址，失效
+            if (!c4) {
+                // 空地址，失效
                 need_rescan = true;
                 break;
             }
 
             const std::uint16_t def_index = tools::mem::read_raw<std::uint16_t>(
                 c4 + schema::m_AttributeManager
-                   + schema::m_Item
-                   + schema::m_iItemDefinitionIndex);
-            if (def_index != 49) { // 不是 C4 了（实体被销毁/地址被复用）
+                + schema::m_Item
+                + schema::m_iItemDefinitionIndex);
+            if (def_index != 49) {
+                // 不是 C4 了（实体被销毁/地址被复用）
                 need_rescan = true;
                 break;
             }
         }
 
-        if (need_rescan) { // 失效立即重扫，下一帧就拿到新 C4 实体
+        if (need_rescan) {
+            // 失效立即重扫，下一帧就拿到新 C4 实体
             g_c4_cache = get_all_c4(); // 立即重扫
             g_c4_tick = C4_CACHE_INTERVAL; // 重置计数
         }
@@ -683,42 +687,72 @@ namespace game {
         return pos;
     }
 
-    // 无后座力
-    void update_rcs(float smooth) {
-        if (!(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) return; // 没按左键直接跳过
-
-        std::uintptr_t pawn = local_player();
-        if (!pawn) return;
-
-        std::uintptr_t aimPunchServices = tools::mem::read_raw<std::uintptr_t>(pawn + schema::m_pAimPunchServices);
-        if (!aimPunchServices) return;
-
-        float current_punch_x = tools::mem::read_raw<float>(aimPunchServices + schema::m_predictableBaseAngle); // 本帧后坐力 X
-        float current_punch_y = tools::mem::read_raw<float>(aimPunchServices + schema::m_predictableBaseAngle + 4); // 本帧后坐力 Y
-
-        static float last_punch_x = 0.0f; // 上一帧后坐力 X
-        static float last_punch_y = 0.0f; // 上一帧后坐力 Y
-
-        float delta_x = current_punch_x - last_punch_x; // 后坐力增量 X
-        float delta_y = current_punch_y - last_punch_y; // 后坐力增量 Y
-
-        last_punch_x = current_punch_x;
-        last_punch_y = current_punch_y;
-
-        if (delta_x == 0.0f && delta_y == 0.0f) return; // 没有增量直接返回
-
-        const std::uintptr_t base = tools::mem::client_base(); // client 模块基址
-        if (!base) return;
-        std::uintptr_t viewAnglesAddr = base + off::client::dwViewAngles; // 视角角度地址
-
-        float current_view_x = tools::mem::read_raw<float>(viewAnglesAddr); // 当前真实视角 X
-        float current_view_y = tools::mem::read_raw<float>(viewAnglesAddr + 4); // 当前真实视角 Y
-
-        // 把后坐力增量从当前视角里减去
-        current_view_x -= (delta_x * smooth);
-        current_view_y -= (delta_y * smooth);
-
-        tools::mem::write<float>(viewAnglesAddr, current_view_x); // 写回 pitch
-        tools::mem::write<float>(viewAnglesAddr + 4, current_view_y); // 写回 yaw
+    // 角度归一化
+    void NormalizeAngles(float &angle) {
+        while (angle > 180.0f) angle -= 360.0f;
+        while (angle < -180.0f) angle += 360.0f;
     }
+
+    // 在 entity.cpp 中替换原来的 update_rcs
+void update_rcs_visual() {
+    static bool back_first = false;
+    static float old_aimpunch_x = 0.0f;
+    static float old_aimpunch_y = 0.0f;
+
+    std::uintptr_t pawn = local_player();
+    if (!pawn) return;
+
+    // 核心改动 读取当前已开火子弹数
+    int shots_fired = tools::mem::read_raw<int>(pawn + schema::m_iShotsFired);
+
+    // 如果子弹数为 0，说明没在开火，直接清空状态并返回
+    if (shots_fired <= 0) {
+        if (!back_first && (old_aimpunch_x != 0.0f || old_aimpunch_y != 0.0f)) {
+            // 松开左键，准星回正
+            const std::uintptr_t base = tools::mem::client_base();
+            auto local_view_angles = reinterpret_cast<Vec3*>(base + off::client::dwViewAngles);
+            if (local_view_angles) {
+                Vec3 back_angles{};
+                back_angles.x = local_view_angles->x + old_aimpunch_x;
+                back_angles.y = local_view_angles->y + old_aimpunch_y;
+
+                // 归一化角度防翻转
+                NormalizeAngles(back_angles.x);
+                NormalizeAngles(back_angles.y);
+
+                local_view_angles->x = back_angles.x;
+                local_view_angles->y = back_angles.y;
+            }
+            back_first = true;
+        }
+        old_aimpunch_x = 0.0f;
+        old_aimpunch_y = 0.0f;
+        return;
+    }
+
+    // 正在开火
+    std::uintptr_t aimPunchServices = tools::mem::read_raw<std::uintptr_t>(pawn + schema::m_pAimPunchServices);
+    if (!aimPunchServices) return;
+
+    float aimpunch_x = tools::mem::read_raw<float>(aimPunchServices + schema::m_predictableBaseAngle);
+    float aimpunch_y = tools::mem::read_raw<float>(aimPunchServices + schema::m_predictableBaseAngle + 4);
+
+    const std::uintptr_t base = tools::mem::client_base();
+    auto local_view_angles = reinterpret_cast<Vec3*>(base + off::client::dwViewAngles);
+    if (!local_view_angles) return;
+
+    Vec3 new_view_angles{};
+    new_view_angles.x = local_view_angles->x + old_aimpunch_x - (aimpunch_x * 2.0f);
+    new_view_angles.y = local_view_angles->y + old_aimpunch_y - (aimpunch_y * 2.0f);
+
+    NormalizeAngles(new_view_angles.x);
+    NormalizeAngles(new_view_angles.y);
+
+    local_view_angles->x = new_view_angles.x;
+    local_view_angles->y = new_view_angles.y;
+
+    old_aimpunch_x = aimpunch_x * 2.0f;
+    old_aimpunch_y = aimpunch_y * 2.0f;
+    back_first = false;
+}
 }

@@ -104,5 +104,5 @@ namespace game {
     bool is_visible_throttled(std::uintptr_t local_pawn, std::uintptr_t target_pawn); // 每敌人每 3 帧最多查一次
 
     // 无后座
-    void update_rcs(float smooth); // 无后座力控制
+    void update_rcs_visual(); // 纯视觉层无后座力控制
 }
