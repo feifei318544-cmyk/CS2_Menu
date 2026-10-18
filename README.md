@@ -18,5 +18,14 @@
 3. 全链路 SEH 防护：调用游戏函数与 Hook 内部指针读写均包裹 `__try / __except` 防爆盾，杜绝按下左键等操作引发的访问冲突闪退。
 4. 高频快照缓存：帧级实体快照，降低每帧 `VirtualQuery` 开销，保证游戏不卡顿。
 
+## 维护指南 (偏移更新)
+如果游戏更新导致辅助失效（如 ESP 不显示、自瞄不准、游戏崩溃），通常是因为内部偏移过期。请按以下步骤更新：
+
+1. **获取最新偏移**：前往 [cs2-dumper](https://github.com/a2x/cs2-dumper) 项目，获取最新的 `client_dll.hpp` 和 `offsets.hpp`。
+2. **更新 schema (结构体偏移)**：对比最新的 `client_dll.hpp`，将更新的 `m_iHealth`、`m_pGameSceneNode`、`m_entitySpottedState` 等字段替换到本项目 `schema.hpp` 中。
+3. **更新 offsets (模块基址偏移)**：对比最新的 `offsets.hpp`，将 `dwEntityList`、`dwLocalPlayerPawn`、`dwViewMatrix`、`dwViewAngles` 等偏移替换到本项目 `offsets.hpp` 中。
+4. **更新 RVA 兜底**：若 `FillUserCmd` 的特征码失效，请从 dump 工具中寻找最新的 `dwFillUserCmd` 偏移，更新 `offsets.hpp` 中的 `dwFillUserCmd` 备用值。
+5. **重新编译注入**：更新完成后，重新编译 DLL 并注入测试。
+
 ## 免责声明
 本项目仅供 C++ 逆向工程、内存安全与图形学渲染技术的学习与交流使用。严禁用于商业用途或破坏游戏公平性的行为。
