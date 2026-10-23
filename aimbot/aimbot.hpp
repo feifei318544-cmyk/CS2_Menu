@@ -54,6 +54,7 @@ namespace aimbot {
         Bone_CalfR = 1 << 15, // 右小腿
         Bone_FootR = 1 << 16, // 右脚
     };
+
     extern uint32_t g_target_bones; // 当前选中的部位组合
 
     std::uintptr_t run_once(); // 主循环

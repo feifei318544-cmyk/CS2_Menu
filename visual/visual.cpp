@@ -67,7 +67,7 @@ namespace visual {
                     "已锁定"); // 锁定标记
     }
 
-        void draw_c4_indicator() {
+    void draw_c4_indicator() {
         if (!g_esp_enabled || !g_esp_show_c4) return; // 加上总开关
 
         const std::vector<std::uintptr_t> &c4_list = game::get_c4_cached();
@@ -78,8 +78,9 @@ namespace visual {
         ImDrawList *dl = ImGui::GetBackgroundDrawList();
         if (!dl) return;
 
+
         // 顶部提示条（只画一条）
-        for (std::uintptr_t c4 : c4_list) {
+        for (std::uintptr_t c4: c4_list) {
             const game::Vec3 c4_pos = game::get_c4_origin(c4);
             const bool has_pos = !(c4_pos.x == 0.0f && c4_pos.y == 0.0f && c4_pos.z == 0.0f);
 
@@ -88,7 +89,7 @@ namespace visual {
             const bool bomb_defused = tools::mem::read_raw<bool>(c4 + schema::m_bBombDefused);
 
             char name[64] = "C4";
-            // 【修复】如果读不到坐标，大概率在玩家身上或者被销毁了
+
             if (!has_pos) std::snprintf(name, sizeof(name), "C4 在玩家身上/未安放");
             else if (bomb_defused) std::snprintf(name, sizeof(name), "C4 已拆解");
             else if (being_defused) std::snprintf(name, sizeof(name), "C4 正在拆弹");
@@ -109,7 +110,7 @@ namespace visual {
         }
 
         // 视野内画圈
-        for (std::uintptr_t c4 : c4_list) {
+        for (std::uintptr_t c4: c4_list) {
             const game::Vec3 c4_pos = game::get_c4_origin(c4);
             if (c4_pos.x == 0.0f && c4_pos.y == 0.0f && c4_pos.z == 0.0f) continue; // 身上没坐标跳过
 
@@ -303,7 +304,7 @@ namespace visual {
         draw_c4_indicator();
     }
 
-        void draw_radar() {
+    void draw_radar() {
         if (!g_radar_enabled) return;
 
         const std::uintptr_t local = game::local_player();
@@ -336,8 +337,10 @@ namespace visual {
         dl->AddCircle(radar_center, radar_radius * 0.33f, IM_COL32(150, 50, 255, 80), 64, 1.0f);
 
         // 4. 画十字线
-        dl->AddLine(ImVec2(radar_center.x - radar_radius, radar_center.y), ImVec2(radar_center.x + radar_radius, radar_center.y), IM_COL32(150, 50, 255, 80), 1.0f);
-        dl->AddLine(ImVec2(radar_center.x, radar_center.y - radar_radius), ImVec2(radar_center.x, radar_center.y + radar_radius), IM_COL32(150, 50, 255, 80), 1.0f);
+        dl->AddLine(ImVec2(radar_center.x - radar_radius, radar_center.y),
+                    ImVec2(radar_center.x + radar_radius, radar_center.y), IM_COL32(150, 50, 255, 80), 1.0f);
+        dl->AddLine(ImVec2(radar_center.x, radar_center.y - radar_radius),
+                    ImVec2(radar_center.x, radar_center.y + radar_radius), IM_COL32(150, 50, 255, 80), 1.0f);
 
         // 5. 画中心点（自己）
         dl->AddCircleFilled(radar_center, 4.0f, IM_COL32(255, 255, 255, 255));
@@ -345,7 +348,7 @@ namespace visual {
         // 获取所有玩家的快照
         const std::vector<game::PawnSnapshot> &snap = game::build_snapshot(local);
 
-        for (const auto &s : snap) {
+        for (const auto &s: snap) {
             // 计算相对坐标 (物理单位)
             float dx = s.origin.x - local_pos.x;
             float dy = s.origin.y - local_pos.y;
@@ -369,8 +372,10 @@ namespace visual {
 
             // 如果敌人死了，画个叉
             if (s.health <= 0) {
-                dl->AddLine(ImVec2(enemy_pos.x - 3, enemy_pos.y - 3), ImVec2(enemy_pos.x + 3, enemy_pos.y + 3), IM_COL32(128, 128, 128, 255), 1.0f);
-                dl->AddLine(ImVec2(enemy_pos.x - 3, enemy_pos.y + 3), ImVec2(enemy_pos.x + 3, enemy_pos.y - 3), IM_COL32(128, 128, 128, 255), 1.0f);
+                dl->AddLine(ImVec2(enemy_pos.x - 3, enemy_pos.y - 3), ImVec2(enemy_pos.x + 3, enemy_pos.y + 3),
+                            IM_COL32(128, 128, 128, 255), 1.0f);
+                dl->AddLine(ImVec2(enemy_pos.x - 3, enemy_pos.y + 3), ImVec2(enemy_pos.x + 3, enemy_pos.y - 3),
+                            IM_COL32(128, 128, 128, 255), 1.0f);
             }
         }
     }
@@ -380,7 +385,7 @@ namespace visual {
         if (!dl) return;
 
         const float font_size = 24.0f; // 字体大小
-        const char* text = "欢迎使用 fēi fēi 辅助菜单";
+        const char *text = "欢迎使用 fēi fēi 辅助菜单";
 
         // 获取屏幕宽度
         const float sw = game::screen_width();

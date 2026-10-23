@@ -41,8 +41,11 @@ namespace visual {
 
     // 雷达
     extern bool g_radar_enabled; // 雷达总开关
-    void draw_radar();           // 绘制雷达
+    void draw_radar(); // 绘制雷达
 
     // 绘制欢迎文字
     void draw_welcome_text();
+
+    // 第三人称开关
+    extern bool g_thirdperson;
 }

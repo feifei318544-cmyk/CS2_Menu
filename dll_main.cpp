@@ -23,7 +23,6 @@ static bool g_menu_open = true;
 static bool g_insert_prev = false;
 static std::atomic<bool> g_inited{false};
 
-// 卸载相关
 static std::atomic<bool> g_unloading{false};
 static std::atomic<int> g_present_depth{0};
 
@@ -31,7 +30,6 @@ using Present = HRESULT(__stdcall*)(IDXGISwapChain *, UINT, UINT);
 
 extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
 
-// 前向声明
 static DWORD WINAPI cleanup_thread(LPVOID);
 
 LRESULT __stdcall WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -46,29 +44,19 @@ LRESULT __stdcall WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 }
 
 long __stdcall my_present(IDXGISwapChain *_this, UINT a, UINT b) {
-    // 已经在卸载流程里，直接走原始 Present，不碰 ImGui
     if (g_unloading.load()) {
         return ((Present) origin_present)(_this, a, b);
     }
 
-    // 进入 Present，计数 +1
     g_present_depth.fetch_add(1);
 
     static bool g_last_menu_state = true;
 
-    // 检测卸载请求
     if (menu::g_unload_requested) {
         menu::g_unload_requested = false;
-
-        // 标记卸载，后续 Present 直接走原始函数
         g_unloading.store(true);
-
-        // 开清理线程，等所有 Present 退出后卸载
         CreateThread(nullptr, 0, cleanup_thread, nullptr, 0, nullptr);
-
         g_present_depth.fetch_sub(1);
-
-        // 调原始 Present 后返回
         return ((Present) origin_present)(_this, a, b);
     }
 
@@ -109,20 +97,17 @@ long __stdcall my_present(IDXGISwapChain *_this, UINT a, UINT b) {
         ImGui_ImplWin32_Init(g_hwnd);
         ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dContext);
 
-        // 装一次子弹追踪 hook（此刻 client.dll 必定已加载完）
         aimbot::install_silent_hook();
 
         g_inited.store(true);
     }
 
-    // F11 menu 开关
     bool insert_now = (GetAsyncKeyState(VK_F11) & 0x8000) != 0;
     if (insert_now && !g_insert_prev) {
         g_menu_open = !g_menu_open;
     }
     g_insert_prev = insert_now;
 
-    // 菜单状态变化时，切换鼠标
     if (g_menu_open != g_last_menu_state) {
         if (g_menu_open) {
             ClipCursor(nullptr);
@@ -148,7 +133,6 @@ long __stdcall my_present(IDXGISwapChain *_this, UINT a, UINT b) {
 
     game::update_frame_cache();
 
-    // 只有选择了模式 1（视觉压枪），才调用视觉压枪函数
     if (menu::g_rcs_mode == 1) {
         game::update_rcs_visual();
     }
@@ -157,18 +141,16 @@ long __stdcall my_present(IDXGISwapChain *_this, UINT a, UINT b) {
 
     const std::uintptr_t aim_target = aimbot::run_once();
 
-    // 暴力自瞄或子弹追踪任一开启，都画同一个瞄准圆
     if (aimbot::g_enabled || aimbot::g_silent_enabled) {
         visual::draw_aim_circle(aimbot::g_circle_radius);
         visual::draw_target_marker(aim_target);
     }
 
-    // 绘制欢迎文字
     visual::draw_welcome_text();
 
-    visual::draw_esp();       // 敌人 ESP（受 g_esp_enabled 控制）
-    visual::draw_c4_indicator(); // C4（受 g_esp_show_c4 控制，独立）
-    visual::draw_radar();     // 雷达
+    visual::draw_esp();
+    visual::draw_c4_indicator();
+    visual::draw_radar();
 
     if (g_menu_open) {
         menu::draw();
@@ -186,27 +168,21 @@ long __stdcall my_present(IDXGISwapChain *_this, UINT a, UINT b) {
     return ((Present) origin_present)(_this, a, b);
 }
 
-// 清理线程：等所有 Present 退出后卸载 DLL
 static DWORD WINAPI cleanup_thread(LPVOID) {
-    // 1. 禁用 hook，后续不再有新 my_present 进入
     MH_DisableHook(MH_ALL_HOOKS);
 
-    // 2. 等所有正在执行的 my_present 退出
     for (int i = 0; i < 200; ++i) {
         if (g_present_depth.load() == 0) break;
         Sleep(10);
     }
 
-    // 3. 再等一下确保 my_present 最后一条 ret 指令执行完
     Sleep(100);
 
-    // 4. 恢复 WndProc
     if (origin_wndProc && g_hwnd) {
         SetWindowLongPtr(g_hwnd, GWLP_WNDPROC, (LONG_PTR) origin_wndProc);
         origin_wndProc = nullptr;
     }
 
-    // 5. 关闭 ImGui
     if (g_inited.load()) {
         ImGui_ImplDX11_Shutdown();
         ImGui_ImplWin32_Shutdown();
@@ -214,7 +190,6 @@ static DWORD WINAPI cleanup_thread(LPVOID) {
         g_inited.store(false);
     }
 
-    // 6. 释放自己创建的 D3D11 资源
     if (g_mainRTV) {
         g_mainRTV->Release();
         g_mainRTV = nullptr;
@@ -223,17 +198,13 @@ static DWORD WINAPI cleanup_thread(LPVOID) {
         g_pd3dContext->Release();
         g_pd3dContext = nullptr;
     }
-    // 注意：g_pd3dDevice 和 g_pSwapChain 是游戏自己的，不要 Release
 
-    // 7. 彻底移除 hook
     MH_RemoveHook(MH_ALL_HOOKS);
     MH_Uninitialize();
 
-    // 8. 恢复鼠标
     ClipCursor(nullptr);
     ShowCursor(TRUE);
 
-    // 9. 卸载 DLL
     HMODULE hSelf = nullptr;
     GetModuleHandleExA(
         GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
@@ -324,7 +295,8 @@ BOOL __stdcall DllMain(HMODULE hModule, DWORD reason, LPVOID) {
     if (reason == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(hModule);
 
-        // 容忍"已初始化"，防止重注入时 MinHook 残留
+         tools::console::open();
+
         MH_STATUS st = MH_Initialize();
         if (st != MH_OK && st != MH_ERROR_ALREADY_INITIALIZED) {
             return FALSE;

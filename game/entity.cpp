@@ -15,8 +15,8 @@
 namespace game {
     // 帧缓存
     static float g_view_matrix[16] = {}; // ViewMatrix 缓存
-    static float g_screen_w = 0.0f; // 屏幕宽度
-    static float g_screen_h = 0.0f; // 屏幕高度
+    static float g_screen_w = 1920.0f; // 屏幕宽度
+    static float g_screen_h = 1080.0f; // 屏幕高度
 
     // 敌人列表缓存
     static std::vector<std::uintptr_t> g_pawns; // 敌人 Pawn 列表缓存
@@ -35,12 +35,10 @@ namespace game {
     static int g_c4_tick = 0; // 缓存剩余帧数
     static constexpr int C4_CACHE_INTERVAL = 20; // C4 列表刷新间隔（帧）
 
-    // 帧缓存
     void update_frame_cache() {
         const std::uintptr_t base = tools::mem::client_base(); // client 模块基址
         if (base) {
             const std::uintptr_t matrix = base + off::client::dwViewMatrix; // 视图矩阵地址
-            // 一次读 64 字节，替代 16 次 VirtualQuery
             if (!tools::mem::safe_memcpy(
                 g_view_matrix,
                 reinterpret_cast<const void *>(matrix),
@@ -50,9 +48,17 @@ namespace game {
         }
 
         RECT rect{}; // 窗口客户区
-        GetClientRect(GetForegroundWindow(), &rect);
-        g_screen_w = static_cast<float>(rect.right - rect.left); // 屏幕宽度
-        g_screen_h = static_cast<float>(rect.bottom - rect.top); // 屏幕高度
+        HWND hwnd = GetForegroundWindow();
+        if (hwnd && GetClientRect(hwnd, &rect)) {
+            float w = static_cast<float>(rect.right - rect.left);
+            float h = static_cast<float>(rect.bottom - rect.top);
+            if (w <= 0 || h <= 0) {
+                w = (float) GetSystemMetrics(SM_CXSCREEN); // 兜底宽
+                h = (float) GetSystemMetrics(SM_CYSCREEN); // 兜底高
+            }
+            g_screen_w = w;
+            g_screen_h = h;
+        }
     }
 
     bool world_to_screen(const Vec3 &world, float &sx, float &sy) {
@@ -75,7 +81,6 @@ namespace game {
     float screen_width() { return g_screen_w; } // 取屏幕宽度
     float screen_height() { return g_screen_h; } // 取屏幕高度
 
-    // 实体列表
     const std::vector<std::uintptr_t> &get_pawns_cached() {
         if (g_pawns_tick <= 0) {
             g_pawns = get_all_pawns(); // 重新扫描
@@ -145,7 +150,6 @@ namespace game {
             base + off::client::dwLocalPlayerPawn); // 本地 Pawn
     }
 
-    // 状态读取
     int get_health(std::uintptr_t entity) {
         if (!entity) return 0;
         return tools::mem::read_raw<int>(entity + schema::m_iHealth); // 当前血量
@@ -256,7 +260,6 @@ namespace game {
         return schema::kEntityStep; // 当前步长
     }
 
-    // 从 Pawn / Controller 读
     std::uintptr_t get_controller_from_pawn(std::uintptr_t pawn) {
         if (!pawn) return 0;
 
@@ -273,7 +276,6 @@ namespace game {
         buf[0] = '\0';
         if (!controller) return buf;
 
-        // 一次读 128 字节，替代 128 次单字符 VirtualQuery
         if (!tools::mem::safe_memcpy(
             buf,
             reinterpret_cast<const void *>(controller + schema::m_iszPlayerName),
@@ -301,7 +303,6 @@ namespace game {
         return amount > 0.5f;
     }
 
-    // 骨骼
     bool get_bone_pos(std::uintptr_t pawn, int bone_index, Vec3 &out) {
         if (!pawn) return false;
         if (bone_index < 0 || bone_index > 128) return false;
@@ -316,7 +317,6 @@ namespace game {
 
         const std::uintptr_t bone_addr = bone_array + bone_index * 32; // 骨骼地址
 
-        // 一次读 12 字节（3 个 float）
         if (!tools::mem::safe_memcpy(
             &out,
             reinterpret_cast<const void *>(bone_addr),
@@ -362,7 +362,6 @@ namespace game {
                    item_services + schema::m_bHasHelmet) != 0; // m_bHasHelmet
     }
 
-    // 武器和距离
     float get_distance(const Vec3 &a, const Vec3 &b) {
         const float dx = a.x - b.x; // x 差值
         const float dy = a.y - b.y; // y 差值
@@ -464,7 +463,6 @@ namespace game {
         }
     }
 
-    // C4
     std::uintptr_t get_planted_c4() {
         const std::uintptr_t base = tools::mem::client_base(); // client 模块基址
         if (!base) return 0;
@@ -472,40 +470,50 @@ namespace game {
             base + off::client::dwPlantedC4); // 已安放 C4
     }
 
-    // 可见性检查
+    // 纯内存读取个人视野掩码
     bool is_visible(std::uintptr_t local_pawn, std::uintptr_t target_pawn) {
         if (!local_pawn || !target_pawn) return false;
         if (local_pawn == target_pawn) return false;
 
-        // 使用我们验证过的 4 个参数签名
-        using IsVisibleFn = bool(*)(void *, void *, int, void *);
-        static IsVisibleFn fn = nullptr;
-        static bool fn_initialized = false;
-
-        if (!fn_initialized) {
-            fn_initialized = true;
-
-            // 直接使用 RVA 获取地址，不再扫描！
-            const std::uintptr_t base = tools::mem::client_base();
-            if (base) {
-                uintptr_t fn_addr = base + schema::kIsVisibleRva; // 也就是 + 0xB00160
-                fn = reinterpret_cast<IsVisibleFn>(fn_addr);
-            }
-        }
-
-        if (!fn) return true; // 如果没拿到地址，默认全可见防崩溃
-
-        // 安全的 Trace 缓冲区
-        char trace_buffer[0x200] = {0};
-
         __try {
-            // 传入安全的掩码 (0x1C1003) 和缓冲区指针，防止引擎内部访问空指针
-            return fn(reinterpret_cast<void *>(local_pawn),
-                      reinterpret_cast<void *>(target_pawn),
-                      0x1C1003,
-                      trace_buffer);
+            // 1. 获取本地玩家的 Controller
+            std::uintptr_t local_controller = get_controller_from_pawn(local_pawn);
+            if (!local_controller) return false;
+
+            // 2. 通过 EntityList 反查 Controller 的实体索引 (Entity Index)
+            const std::uintptr_t base = tools::mem::client_base();
+            if (!base) return false;
+            const std::uintptr_t list = tools::mem::read<std::uintptr_t>(base + off::client::dwEntityList);
+            if (!list) return false;
+
+            int local_entity_index = -1;
+            // 遍历 64 个 Chunk（group），每个 Chunk 有 512 个槽位（slot）
+            for (int group = 0; group < 64; ++group) {
+                const std::uintptr_t chunk = tools::mem::read<std::uintptr_t>(list + 0x10 + 0x8 * group);
+                if (!chunk) continue;
+                for (int slot = 0; slot < 512; ++slot) {
+                    if (tools::mem::read_raw<std::uintptr_t>(chunk + schema::kEntityStep * slot) == local_controller) {
+                        // 还原全局实体索引： group * 512 + slot，即 group << 9 加 slot
+                        local_entity_index = (group << 9) + slot;
+                        break;
+                    }
+                }
+                if (local_entity_index != -1) break;
+            }
+            if (local_entity_index <= 0) return false;
+
+            // 3. 计算 PlayerSlot (CS2 规则: Slot = EntityIndex - 1)
+            int local_slot = local_entity_index - 1;
+            if (local_slot < 0 || local_slot > 63) return false;
+
+            // 4. 读取目标玩家的 m_bSpottedByMask (你 schema 里的 0x1E80 + 0xC)
+            std::uint64_t spotted_mask = tools::mem::read_raw<std::uint64_t>(
+                target_pawn + schema::m_entitySpottedState + schema::m_bSpottedByMask
+            );
+
+            // 5. 检查掩码中对应本地 PlayerSlot 的位是否为 1
+            return (spotted_mask & (1ULL << local_slot)) != 0;
         } __except (EXCEPTION_EXECUTE_HANDLER) {
-            // 如果游戏版本更新导致函数改变，捕捉异常返回 false
             return false;
         }
     }
@@ -523,7 +531,6 @@ namespace game {
         return v;
     }
 
-    // 每帧快照
     const std::vector<PawnSnapshot> &build_snapshot(std::uintptr_t local) {
         g_snapshot.clear(); // 清空上一帧
         if (!local) return g_snapshot;
@@ -551,13 +558,11 @@ namespace game {
             s.origin = get_origin(e); // 脚底坐标
             if (s.origin.x == 0.0f && s.origin.y == 0.0f && s.origin.z == 0.0f) continue;
 
-            // 头部兜底
             if (!get_bone_pos(e, 7, s.head)) {
                 s.head = s.origin;
                 s.head.z += s.ducking ? 46.0f : 64.0f; // 估算眼睛高度
             }
 
-            // 各部位骨骼
             get_bone_pos(e, 6, s.neck); // 脖子
             get_bone_pos(e, 23, s.chest); // 胸部
             get_bone_pos(e, 4, s.body); // 身体（脊柱）
@@ -585,10 +590,16 @@ namespace game {
         return g_snapshot;
     }
 
-    // 扫描 entity list 取所有 C4 实体（含身上/地上/已安放）
-    std::vector<std::uintptr_t> get_all_c4() {
+        std::vector<std::uintptr_t> get_all_c4() {
         std::vector<std::uintptr_t> result; // 结果列表
 
+        // 1. 首先获取已安放的 C4（使用 dwPlantedC4 偏移）
+        std::uintptr_t planted_c4 = get_planted_c4();
+        if (planted_c4) {
+            result.push_back(planted_c4);
+        }
+
+        // 2. 扫描 EntityList 找 掉落 / 背包里的 C4
         const std::uintptr_t base = tools::mem::client_base(); // client 模块基址
         if (!base) return result;
 
@@ -616,12 +627,15 @@ namespace game {
 
                 if (!e || e < 0x10000 || e >= 0x7FF000000000ULL) continue; // 地址非法
 
+                // 避免重复添加（如果已安放C4在EntityList里也有一份）
+                if (e == planted_c4) continue;
+
                 // 读物品定义索引，49 = C4
                 const std::uint16_t def_index = tools::mem::read_raw<std::uint16_t>(
                     e + schema::m_AttributeManager
                     + schema::m_Item
                     + schema::m_iItemDefinitionIndex);
-                if (def_index != 49) continue; // 不是 C4
+                if (def_index != 49) continue; // 不是掉落/背包里的 C4
 
                 result.push_back(e); // 收进结果
             }
@@ -630,13 +644,8 @@ namespace game {
         return result;
     }
 
-    /*
-     * C4 列表缓存，每 20 帧刷新一次
-     * 每帧校验缓存地址是否还是 C4，失效立即重扫，保证 C4 掉地/被捡/被安放时实时更新
-     */
     const std::vector<std::uintptr_t> &get_c4_cached() {
         if (g_c4_tick <= 0) {
-            // 缓存过期 → 重新扫
             g_c4_cache = get_all_c4(); // 重新扫描
             g_c4_tick = C4_CACHE_INTERVAL; // 重置计数
         }
@@ -645,24 +654,28 @@ namespace game {
         bool need_rescan = false; // 是否需要立即重扫
         for (std::uintptr_t c4: g_c4_cache) {
             if (!c4) {
-                // 空地址，失效
                 need_rescan = true;
                 break;
             }
 
+            // 如果是已安放的 C4，它没有 def_index，只要指针不为空就认为有效
+            // 你可以简单加一个判断：如果 c4 指向的是已安放的 C4
+            if (c4 == get_planted_c4()) {
+                continue;
+            }
+
+            // 否则（背包里或地上的），才校验 def_index
             const std::uint16_t def_index = tools::mem::read_raw<std::uint16_t>(
                 c4 + schema::m_AttributeManager
                 + schema::m_Item
                 + schema::m_iItemDefinitionIndex);
             if (def_index != 49) {
-                // 不是 C4 了（实体被销毁/地址被复用）
                 need_rescan = true;
                 break;
             }
         }
 
         if (need_rescan) {
-            // 失效立即重扫，下一帧就拿到新 C4 实体
             g_c4_cache = get_all_c4(); // 立即重扫
             g_c4_tick = C4_CACHE_INTERVAL; // 重置计数
         }
@@ -673,90 +686,59 @@ namespace game {
     Vec3 get_c4_origin(std::uintptr_t c4) {
         if (!c4) return {};
 
-        // 1. 尝试直接读取实体自身的绝对坐标（安放或掉落时通常能读到）
+        // 1. 尝试通过节点读绝对坐标（对已安放和掉地上的都有效）
         Vec3 pos = get_origin(c4);
         if (pos.x != 0.0f || pos.y != 0.0f || pos.z != 0.0f) return pos;
 
-        const std::uintptr_t node = tools::mem::read_raw<std::uintptr_t>(c4 + schema::m_pGameSceneNode);
-        if (node) {
-            // 直接读节点里面的绝对世界坐标
-            pos = tools::mem::read_raw<Vec3>(node + schema::m_vecAbsOrigin);
-            if (pos.x != 0.0f || pos.y != 0.0f || pos.z != 0.0f) return pos;
+        // 2. 有些情况 C4 节点读不到，尝试直接读实体自身的坐标（老版本做法）
+        pos = tools::mem::read_raw<Vec3>(c4 + schema::m_vecOrigin);
+        if (pos.x != 0.0f || pos.y != 0.0f || pos.z != 0.0f) return pos;
 
-            // 再兜底读相对坐标
-            pos = tools::mem::read_raw<Vec3>(node + schema::m_vecOrigin);
-            if (pos.x != 0.0f || pos.y != 0.0f || pos.z != 0.0f) return pos;
-        }
-
-        return {}; // 如果都读不到（比如 C4 在玩家背包里），返回空坐标
+        return {}; // 返回空坐标
     }
 
-    // 角度归一化
     void NormalizeAngles(float &angle) {
         while (angle > 180.0f) angle -= 360.0f;
         while (angle < -180.0f) angle += 360.0f;
     }
 
-    // 在 entity.cpp 中替换原来的 update_rcs
-void update_rcs_visual() {
-    static bool back_first = false;
-    static float old_aimpunch_x = 0.0f;
-    static float old_aimpunch_y = 0.0f;
 
-    std::uintptr_t pawn = local_player();
-    if (!pawn) return;
+    void update_rcs_visual() {
+        static float old_aimpunch_x = 0.0f;
+        static float old_aimpunch_y = 0.0f;
 
-    // 核心改动 读取当前已开火子弹数
-    int shots_fired = tools::mem::read_raw<int>(pawn + schema::m_iShotsFired);
+        std::uintptr_t pawn = local_player();
+        if (!pawn) return;
 
-    // 如果子弹数为 0，说明没在开火，直接清空状态并返回
-    if (shots_fired <= 0) {
-        if (!back_first && (old_aimpunch_x != 0.0f || old_aimpunch_y != 0.0f)) {
-            // 松开左键，准星回正
-            const std::uintptr_t base = tools::mem::client_base();
-            auto local_view_angles = reinterpret_cast<Vec3*>(base + off::client::dwViewAngles);
-            if (local_view_angles) {
-                Vec3 back_angles{};
-                back_angles.x = local_view_angles->x + old_aimpunch_x;
-                back_angles.y = local_view_angles->y + old_aimpunch_y;
+        int shots_fired = tools::mem::read_raw<int>(pawn + schema::m_iShotsFired);
 
-                // 归一化角度防翻转
-                NormalizeAngles(back_angles.x);
-                NormalizeAngles(back_angles.y);
-
-                local_view_angles->x = back_angles.x;
-                local_view_angles->y = back_angles.y;
-            }
-            back_first = true;
+        if (shots_fired <= 0) {
+            old_aimpunch_x = 0.0f;
+            old_aimpunch_y = 0.0f;
+            return;
         }
-        old_aimpunch_x = 0.0f;
-        old_aimpunch_y = 0.0f;
-        return;
+
+        std::uintptr_t aimPunchServices = tools::mem::read_raw<std::uintptr_t>(pawn + schema::m_pAimPunchServices);
+        if (!aimPunchServices) return;
+
+        float aimpunch_x = tools::mem::read_raw<float>(aimPunchServices + schema::m_predictableBaseAngle);
+        float aimpunch_y = tools::mem::read_raw<float>(aimPunchServices + schema::m_predictableBaseAngle + 4);
+
+        const std::uintptr_t base = tools::mem::client_base();
+        auto local_view_angles = reinterpret_cast<Vec3 *>(base + off::client::dwViewAngles);
+        if (!local_view_angles) return;
+
+        Vec3 new_view_angles{};
+        new_view_angles.x = local_view_angles->x + old_aimpunch_x - (aimpunch_x * 2.0f);
+        new_view_angles.y = local_view_angles->y + old_aimpunch_y - (aimpunch_y * 2.0f);
+
+        NormalizeAngles(new_view_angles.x);
+        NormalizeAngles(new_view_angles.y);
+
+        local_view_angles->x = new_view_angles.x;
+        local_view_angles->y = new_view_angles.y;
+
+        old_aimpunch_x = aimpunch_x * 2.0f;
+        old_aimpunch_y = aimpunch_y * 2.0f;
     }
-
-    // 正在开火
-    std::uintptr_t aimPunchServices = tools::mem::read_raw<std::uintptr_t>(pawn + schema::m_pAimPunchServices);
-    if (!aimPunchServices) return;
-
-    float aimpunch_x = tools::mem::read_raw<float>(aimPunchServices + schema::m_predictableBaseAngle);
-    float aimpunch_y = tools::mem::read_raw<float>(aimPunchServices + schema::m_predictableBaseAngle + 4);
-
-    const std::uintptr_t base = tools::mem::client_base();
-    auto local_view_angles = reinterpret_cast<Vec3*>(base + off::client::dwViewAngles);
-    if (!local_view_angles) return;
-
-    Vec3 new_view_angles{};
-    new_view_angles.x = local_view_angles->x + old_aimpunch_x - (aimpunch_x * 2.0f);
-    new_view_angles.y = local_view_angles->y + old_aimpunch_y - (aimpunch_y * 2.0f);
-
-    NormalizeAngles(new_view_angles.x);
-    NormalizeAngles(new_view_angles.y);
-
-    local_view_angles->x = new_view_angles.x;
-    local_view_angles->y = new_view_angles.y;
-
-    old_aimpunch_x = aimpunch_x * 2.0f;
-    old_aimpunch_y = aimpunch_y * 2.0f;
-    back_first = false;
-}
 }

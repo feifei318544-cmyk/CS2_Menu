@@ -74,13 +74,13 @@ namespace menu {
             dl->AddText(tpos, IM_COL32(217, 128, 255, 255), title);
 
             const float sep_y = title_pos.y + title_h;
-            dl->AddLine(ImVec2(title_pos.x, sep_y), ImVec2(title_pos.x + title_w, sep_y), IM_COL32(89, 46, 166, 180), 1.0f);
+            dl->AddLine(ImVec2(title_pos.x, sep_y), ImVec2(title_pos.x + title_w, sep_y), IM_COL32(89, 46, 166, 180),
+                        1.0f);
 
             ImGui::SetCursorScreenPos(ImVec2(title_pos.x, sep_y + ImGui::GetStyle().ItemSpacing.y));
         }
 
         if (ImGui::BeginTabBar("##MainTabs", ImGuiTabBarFlags_None)) {
-            // 游戏 Tab
             if (ImGui::BeginTabItem("  游戏  ")) {
                 ImGui::Spacing();
 
@@ -105,13 +105,12 @@ namespace menu {
                     ImGui::SliderFloat("范围", &aimbot::g_circle_radius, 320.0f, 800.0f, "%.0f px");
                     ImGui::SliderFloat("最大距离", &aimbot::g_max_world_dist, 500.0f, 10000.0f, "%.0f 单位");
 
-                    const char* smooth_types[] = { "指数收敛 (Exp)", "恒速步进 (Linear)", "混合 (Hybrid)" };
-                    int current_type = (int)aimbot::g_smooth_type;
+                    const char *smooth_types[] = {"指数收敛 (Exp)", "恒速步进 (Linear)", "混合 (Hybrid)"};
+                    int current_type = (int) aimbot::g_smooth_type;
                     if (ImGui::Combo("平滑算法", &current_type, smooth_types, IM_ARRAYSIZE(smooth_types))) {
-                        aimbot::g_smooth_type = (aimbot::SmoothType)current_type;
+                        aimbot::g_smooth_type = (aimbot::SmoothType) current_type;
                     }
 
-                    // 算法说明展示
                     if (aimbot::g_smooth_type == aimbot::SmoothType::Exponential) {
                         ImGui::TextDisabled("'指数收敛'越接近目标速度越慢，极其平滑，适合远距离锁头");
                     } else if (aimbot::g_smooth_type == aimbot::SmoothType::Linear) {
@@ -130,46 +129,53 @@ namespace menu {
                     ImGui::Checkbox("只瞄可见敌人", &aimbot::g_only_visible);
                     ImGui::EndDisabled();
 
-                    // 瞄准部位 (单选)
                     ImGui::TextColored(ImVec4(0.8f, 0.8f, 1.0f, 1.0f), "瞄准部位 (单选)");
                     ImGui::Separator();
 
-                    auto BoneRadio = [](const char* label, uint32_t bit) {
+                    auto BoneRadio = [](const char *label, uint32_t bit) {
                         if (ImGui::RadioButton(label, aimbot::g_target_bones == bit)) {
                             aimbot::g_target_bones = bit;
                         }
                     };
 
-                    // 第一排：躯干
-                    BoneRadio("头部", aimbot::Bone_Head); ImGui::SameLine(0, 15.0f);
-                    BoneRadio("脖子", aimbot::Bone_Neck); ImGui::SameLine(0, 15.0f);
-                    BoneRadio("胸部", aimbot::Bone_Chest); ImGui::SameLine(0, 15.0f);
-                    BoneRadio("身体", aimbot::Bone_Body); ImGui::SameLine(0, 15.0f);
+                    BoneRadio("头部", aimbot::Bone_Head);
+                    ImGui::SameLine(0, 15.0f);
+                    BoneRadio("脖子", aimbot::Bone_Neck);
+                    ImGui::SameLine(0, 15.0f);
+                    BoneRadio("胸部", aimbot::Bone_Chest);
+                    ImGui::SameLine(0, 15.0f);
+                    BoneRadio("身体", aimbot::Bone_Body);
+                    ImGui::SameLine(0, 15.0f);
                     BoneRadio("骨盆", aimbot::Bone_Pelvis);
 
-                    // 第二排：左臂
-                    BoneRadio("左大臂", aimbot::Bone_ArmL); ImGui::SameLine(0, 15.0f);
-                    BoneRadio("左小臂", aimbot::Bone_ForearmL); ImGui::SameLine(0, 15.0f);
+                    BoneRadio("左大臂", aimbot::Bone_ArmL);
+                    ImGui::SameLine(0, 15.0f);
+                    BoneRadio("左小臂", aimbot::Bone_ForearmL);
+                    ImGui::SameLine(0, 15.0f);
                     BoneRadio("左手", aimbot::Bone_HandL);
 
-                    // 第三排：右臂
-                    BoneRadio("右大臂", aimbot::Bone_ArmR); ImGui::SameLine(0, 15.0f);
-                    BoneRadio("右小臂", aimbot::Bone_ForearmR); ImGui::SameLine(0, 15.0f);
+                    BoneRadio("右大臂", aimbot::Bone_ArmR);
+                    ImGui::SameLine(0, 15.0f);
+                    BoneRadio("右小臂", aimbot::Bone_ForearmR);
+                    ImGui::SameLine(0, 15.0f);
                     BoneRadio("右手", aimbot::Bone_HandR);
 
-                    // 第四排：腿部
-                    BoneRadio("左大腿", aimbot::Bone_ThighL); ImGui::SameLine(0, 15.0f);
-                    BoneRadio("左小腿", aimbot::Bone_CalfL); ImGui::SameLine(0, 15.0f);
-                    BoneRadio("左脚", aimbot::Bone_FootL); ImGui::SameLine(0, 15.0f);
-                    BoneRadio("右大腿", aimbot::Bone_ThighR); ImGui::SameLine(0, 15.0f);
-                    BoneRadio("右小腿", aimbot::Bone_CalfR); ImGui::SameLine(0, 15.0f);
+                    BoneRadio("左大腿", aimbot::Bone_ThighL);
+                    ImGui::SameLine(0, 15.0f);
+                    BoneRadio("左小腿", aimbot::Bone_CalfL);
+                    ImGui::SameLine(0, 15.0f);
+                    BoneRadio("左脚", aimbot::Bone_FootL);
+                    ImGui::SameLine(0, 15.0f);
+                    BoneRadio("右大腿", aimbot::Bone_ThighR);
+                    ImGui::SameLine(0, 15.0f);
+                    BoneRadio("右小腿", aimbot::Bone_CalfR);
+                    ImGui::SameLine(0, 15.0f);
                     BoneRadio("右脚", aimbot::Bone_FootR);
 
                     ImGui::Spacing();
                     ImGui::Separator();
                     ImGui::Spacing();
 
-                    // 后坐力控制区域
                     ImGui::TextColored(ImVec4(0.5f, 0.8f, 1.0f, 1.0f), "后坐力控制 (RCS)");
                     ImGui::Separator();
 
@@ -213,10 +219,10 @@ namespace menu {
                     ImGui::Spacing();
                     ImGui::EndDisabled();
 
-
-                    ImGui::TextColored(ImVec4(0.5f, 0.8f, 1.0f, 1.0f), "雷达");
+                    ImGui::TextColored(ImVec4(0.5f, 0.8f, 1.0f, 1.0f), "");
                     ImGui::Checkbox("开启雷达", &visual::g_radar_enabled);
                     ImGui::Spacing();
+
                 }
 
                 ImGui::EndTabItem();

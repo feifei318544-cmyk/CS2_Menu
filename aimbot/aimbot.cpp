@@ -1,7 +1,6 @@
 #include "aimbot.hpp"
 #include "../game/entity.hpp"
 #include "../tools/memory.hpp"
-#include "pattern_scan.hpp"
 #include "offsets.hpp"
 #include "schema.hpp"
 
@@ -9,200 +8,195 @@
 #include <cmath>
 #include <limits>
 #include <vector>
+#include <cstdio>
 
 #include "menu.hpp"
 #include "MinHook.h"
 
 namespace aimbot {
-    // 共用参数
-    float g_circle_radius = 320.0f; // 屏幕中心圆半径（像素）
-    float g_max_world_dist = 700.0f; // 最大世界距离
+    float g_circle_radius = 320.0f;
+    float g_max_world_dist = 700.0f;
 
-    // 选目标偏好
-    bool g_prefer_visible = true; // 优先瞄准可见敌人
-    bool g_prefer_targeting_me = true; // 优先瞄准正在瞄准我的敌人
-    bool g_only_visible = true; // 只瞄准可见敌人（硬过滤）
+    bool g_prefer_visible = true;
+    bool g_prefer_targeting_me = true;
+    bool g_only_visible = true;
 
-    // 暴力瞄准
-    bool g_enabled = false; // 暴力自瞄开关
+    bool g_enabled = false;
+    bool g_silent_enabled = false;
+    float g_silent_pitch = 0.0f;
+    float g_silent_yaw = 0.0f;
+    bool g_silent_has_target = false;
 
-    // 子弹追踪
-    bool g_silent_enabled = false; // 子弹追踪开关
-    float g_silent_pitch = 0.0f; // 静默瞄准 pitch（俯仰角）
-    float g_silent_yaw = 0.0f; // 静默瞄准 yaw（偏航角）
-    bool g_silent_has_target = false; // 本帧是否有静默目标
+    SmoothType g_smooth_type = SmoothType::Exponential;
+    float g_smooth_x = 5.0f;
+    float g_smooth_y = 5.0f;
 
-    // RCS
-    bool g_rcs_enabled = false; // RCS 压枪开关
-    float g_rcs_strength = 0.5f; // RCS 压枪强度（0~1）
+    uint32_t g_target_bones = Bone_Head;
 
-    // 自动开火
-    bool g_auto_fire_enabled = false; // 自动开火开关
+    constexpr float kEyeStand = 64.0f;
+    constexpr float kEyeDuck = 46.0f;
 
-    // 平滑配置
-    SmoothType g_smooth_type = SmoothType::Exponential; // 当前平滑算法
-    float g_smooth_x = 5.0f; // 水平平滑系数
-    float g_smooth_y = 5.0f; // 垂直平滑系数
-
-    uint32_t g_target_bones = Bone_Head; // 默认瞄准头部
-
-    constexpr float kEyeStand = 64.0f; // 站立时眼睛高度
-    constexpr float kEyeDuck = 46.0f; // 蹲下时眼睛高度
-
-    // 根据 CE 和 IDA 验证过的特征码
-    static const char* kFillUserCmdPatterns[] = {
-        // 完整特征（包括 sub rsp 栈大小调整）
-        "48 89 5C 24 18 55 57 41 56 48 8D 6C 24 C9 48 81 EC B0 00 00 00",
-        // 容忍堆栈大小变化的模糊特征
-        "48 89 5C 24 ? 55 57 41 56 48 8D 6C 24 ? 48 81 EC ? ? ? ?",
-    };
-
-    using FillUserCmdFn = __int64(*)(int *a1, __int64 a2);
+    /*
+     * sub_180CFBD10 实际签名（IDA）:
+     * __int64 __fastcall(_DWORD *a1, __int64 a2, char a3, double a4, int a5, __int64 a6)
+     * a1 是输入历史条目，a2 是最终发包的 protobuf 结构。
+     * 视角写入在 a2+0x18 指向的结构体的 +0x18 / +0x1C / +0x20 处，
+     * 必须在原函数返回后覆盖，否则会被原函数覆盖。
+     */
+    using FillUserCmdFn = __int64(__fastcall*)(void *a1, void *a2, char a3,
+                                               double a4, int a5, __int64 a6);
     FillUserCmdFn oFillUserCmd = nullptr;
 
-    // 你的原版 Hook 签名
-    __int64 __fastcall hkFillUserCmd(int *a1, __int64 a2) {
-        // 防护：防止空指针导致崩溃
-        if (!a1) return oFillUserCmd(a1, a2);
+    __int64 __fastcall hkFillUserCmd(void *a1, void *a2, char a3,
+                                     double a4, int a5, __int64 a6) {
+        if (!a1 || !a2) {
+            return oFillUserCmd(a1, a2, a3, a4, a5, a6);
+        }
 
-        // 1. 完美无后座 (模式 2) - 最先修正基础视角
-        if (menu::g_rcs_mode == 2) {
-            std::uintptr_t pawn = game::local_player();
-            if (pawn) {
-                int shots_fired = tools::mem::read_raw<int>(pawn + schema::m_iShotsFired);
-                if (shots_fired > 0) {
-                    std::uintptr_t aimPunch = tools::mem::read_raw<std::uintptr_t>(pawn + schema::m_pAimPunchServices);
-                    if (aimPunch) {
-                        float punch_x = tools::mem::read_raw<float>(aimPunch + schema::m_predictableBaseAngle);
-                        float punch_y = tools::mem::read_raw<float>(aimPunch + schema::m_predictableBaseAngle + 4);
+        // 先让原函数完整跑完，它会初始化 a2+0x18 的指针
+        __int64 result = oFillUserCmd(a1, a2, a3, a4, a5, a6);
 
-                        if (punch_x != 0.0f || punch_y != 0.0f) {
-                            // 防爆盾：保护内存读取
-                            __try {
-                                *(float *) ((char *) a1 + 0x10) -= punch_x * 2.0f; // 扣除垂直后坐力
-                                *(float *) ((char *) a1 + 0x14) -= punch_y * 2.0f; // 扣除水平后坐力
-                            } __except (EXCEPTION_EXECUTE_HANDLER) {}
+        __try {
+            // a2+0x18 存放的是真正的视角结构体指针
+            uintptr_t v16 = *(uintptr_t *) ((char *) a2 + 0x18);
+            if (v16) {
+                // 1. 子弹追踪（静默自瞄）
+                if (g_silent_enabled && g_silent_has_target) {
+                    float safe_pitch = g_silent_pitch;
+                    float safe_yaw = g_silent_yaw;
+                    if (safe_pitch != safe_pitch) safe_pitch = 0.0f;
+                    if (safe_yaw != safe_yaw) safe_yaw = 0.0f;
+
+                    // 视角在 v16 + 0x18 / 0x1C / 0x20
+                    *(float *) (v16 + 0x18) = safe_pitch; // Pitch
+                    *(float *) (v16 + 0x1C) = safe_yaw; // Yaw
+                    *(float *) (v16 + 0x20) = 0.0f; // Roll
+                }
+
+                // 2. RCS 指令修正 (模式 2)
+                else if (menu::g_rcs_mode == 2) {
+                    std::uintptr_t pawn = game::local_player();
+                    if (pawn) {
+                        int shots_fired = tools::mem::read_raw<int>(pawn + schema::m_iShotsFired);
+                        if (shots_fired > 0) {
+                            std::uintptr_t aimPunch = tools::mem::read_raw<std::uintptr_t>(
+                                pawn + schema::m_pAimPunchServices);
+                            if (aimPunch) {
+                                float punch_x = tools::mem::read_raw<float>(aimPunch + schema::m_predictableBaseAngle);
+                                float punch_y = tools::mem::read_raw<float>(
+                                    aimPunch + schema::m_predictableBaseAngle + 4);
+                                if (punch_x != 0.0f || punch_y != 0.0f) {
+                                    *(float *) (v16 + 0x18) -= punch_x * 2.0f;
+                                    *(float *) (v16 + 0x1C) -= punch_y * 2.0f;
+                                }
+                            }
                         }
                     }
                 }
             }
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            // 吞掉异常，确保原函数结果顺利返回
         }
 
-        // 2. 子弹追踪 (静默自瞄) - 优先级最高，覆盖 RCS 的视角
-        if (g_silent_enabled && g_silent_has_target) {
-            __try {
-                *(float *) ((char *) a1 + 0x10) = g_silent_pitch; // 覆盖源 pitch
-                *(float *) ((char *) a1 + 0x14) = g_silent_yaw;   // 覆盖源 yaw
-                *(float *) ((char *) a1 + 0x18) = 0.0f;           // 清零 roll
-            } __except (EXCEPTION_EXECUTE_HANDLER) {}
-        }
-
-        // 3. 最后执行原函数（保持你原本的优秀写法）
-        return oFillUserCmd(a1, a2);
+        return result;
     }
 
     void install_silent_hook() {
         uintptr_t base = tools::mem::client_base();
         if (!base) return;
 
-        uintptr_t target = 0;
-
-        for (const char* pattern : kFillUserCmdPatterns) {
-            target = Scanner::scan_fill_user_cmd_pattern(pattern);
-            if (target) break;
-        }
-
+        // dwFillUserCmd = 0xCFBD10，对应 sub_180CFBD10
+        uintptr_t target = base + off::client::dwFillUserCmd;
         if (!target) return;
 
-        uint8_t* func_start = reinterpret_cast<uint8_t*>(target);
-        if (func_start[0] == 0x48 && func_start[1] == 0x89 && func_start[2] == 0x5C && func_start[3] == 0x24) {
-            MH_STATUS st = MH_CreateHook((LPVOID) target, (LPVOID) hkFillUserCmd, (LPVOID *) &oFillUserCmd);
-            if (st == MH_OK) {
-                MH_EnableHook((LPVOID) target);
-            }
+        MH_STATUS st = MH_CreateHook((LPVOID) target, (LPVOID) hkFillUserCmd,
+                                     (LPVOID *) &oFillUserCmd);
+        if (st == MH_OK) {
+            MH_EnableHook((LPVOID) target);
         }
     }
 
-
-    // 计算目标角度
-    static void calc_angle(const game::Vec3 &local_eye, const game::Vec3 &target_aim, float &pitch, float &yaw) {
-        const float dx = target_aim.x - local_eye.x; // x 差值
-        const float dy = target_aim.y - local_eye.y; // y 差值
-        const float dz = target_aim.z - local_eye.z; // z 差值
-        const float hyp = std::sqrt(dx * dx + dy * dy); // 水平距离
-        yaw = std::atan2(dy, dx) * 180.0f / 3.14159265f; // 偏航角
-        pitch = -std::atan2(dz, hyp) * 180.0f / 3.14159265f; // 俯仰角
+    static void calc_angle(const game::Vec3 &local_eye, const game::Vec3 &target_aim,
+                           float &pitch, float &yaw) {
+        const float dx = target_aim.x - local_eye.x;
+        const float dy = target_aim.y - local_eye.y;
+        const float dz = target_aim.z - local_eye.z;
+        const float hyp = std::sqrt(dx * dx + dy * dy);
+        yaw = std::atan2(dy, dx) * 180.0f / 3.14159265f;
+        pitch = -std::atan2(dz, hyp) * 180.0f / 3.14159265f;
     }
 
-    // 写视角（支持三种算法，分 X/Y 独立平滑）
     static void set_view_angles(float target_pitch, float target_yaw) {
-        const std::uintptr_t base = tools::mem::client_base(); // client 模块基址
+        const std::uintptr_t base = tools::mem::client_base();
         if (!base) return;
-        const std::uintptr_t angles = base + off::client::dwViewAngles; // 视角地址
+        const std::uintptr_t angles = base + off::client::dwViewAngles;
 
-        // 读取游戏引擎当前的真实视角
-        const float cur_pitch = tools::mem::read_raw<float>(angles + 0x0); // 当前 pitch
-        const float cur_yaw = tools::mem::read_raw<float>(angles + 0x4); // 当前 yaw
+        __try {
+            const float cur_pitch = tools::mem::read_raw<float>(angles + 0x0);
+            const float cur_yaw = tools::mem::read_raw<float>(angles + 0x4);
 
-        float dp = target_pitch - cur_pitch; // pitch 差
-        float dy = target_yaw - cur_yaw; // yaw 差
-        while (dy > 180.0f) dy -= 360.0f; // 归一化
-        while (dy < -180.0f) dy += 360.0f;
+            float dp = target_pitch - cur_pitch;
+            float dy = target_yaw - cur_yaw;
+            while (dy > 180.0f) dy -= 360.0f;
+            while (dy < -180.0f) dy += 360.0f;
 
-        // 默认不移动
-        float new_pitch = cur_pitch;
-        float new_yaw = cur_yaw;
+            float new_pitch = cur_pitch;
+            float new_yaw = cur_yaw;
 
-        if (g_smooth_type == SmoothType::Exponential) {
-            float factorX = g_smooth_x <= 1.0f ? 1.0f : (1.0f / g_smooth_x);
-            float factorY = g_smooth_y <= 1.0f ? 1.0f : (1.0f / g_smooth_y);
-            new_pitch = cur_pitch + dp * factorX;
-            new_yaw = cur_yaw + dy * factorY;
-        } else if (g_smooth_type == SmoothType::Linear) {
-            float stepX = g_smooth_x * 0.1f;
-            float stepY = g_smooth_y * 0.1f;
-            new_pitch = cur_pitch + (dp > stepX ? stepX : (dp < -stepX ? -stepX : dp));
-            new_yaw = cur_yaw + (dy > stepY ? stepY : (dy < -stepY ? -stepY : dy));
-        } else {
-            float factorX = g_smooth_x <= 1.0f ? 1.0f : (1.0f / g_smooth_x);
-            float factorY = g_smooth_y <= 1.0f ? 1.0f : (1.0f / g_smooth_y);
-            new_pitch = cur_pitch + dp * (factorX * 0.8f);
-            new_yaw = cur_yaw + dy * (factorY * 0.8f);
+            if (g_smooth_type == SmoothType::Exponential) {
+                float factorX = g_smooth_x <= 1.0f ? 1.0f : (1.0f / g_smooth_x);
+                float factorY = g_smooth_y <= 1.0f ? 1.0f : (1.0f / g_smooth_y);
+                new_pitch = cur_pitch + dp * factorX;
+                new_yaw = cur_yaw + dy * factorY;
+            } else if (g_smooth_type == SmoothType::Linear) {
+                float stepX = g_smooth_x * 0.1f;
+                float stepY = g_smooth_y * 0.1f;
+                new_pitch = cur_pitch + (dp > stepX ? stepX : (dp < -stepX ? -stepX : dp));
+                new_yaw = cur_yaw + (dy > stepY ? stepY : (dy < -stepY ? -stepY : dy));
+            } else {
+                float factorX = g_smooth_x <= 1.0f ? 1.0f : (1.0f / g_smooth_x);
+                float factorY = g_smooth_y <= 1.0f ? 1.0f : (1.0f / g_smooth_y);
+                new_pitch = cur_pitch + dp * (factorX * 0.8f);
+                new_yaw = cur_yaw + dy * (factorY * 0.8f);
+            }
+
+            if (std::fabs(dp) < 0.05f) new_pitch = target_pitch;
+            if (std::fabs(dy) < 0.05f) new_yaw = target_yaw;
+
+            tools::mem::write<float>(angles + 0x0, new_pitch);
+            tools::mem::write<float>(angles + 0x4, new_yaw);
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
         }
-
-        // 核心修正：当准星已经无限接近目标时，直接吸附过去，消灭虚位
-        if (std::fabs(dp) < 0.05f) new_pitch = target_pitch;
-        if (std::fabs(dy) < 0.05f) new_yaw = target_yaw;
-
-        tools::mem::write<float>(angles + 0x0, new_pitch); // 写 pitch
-        tools::mem::write<float>(angles + 0x4, new_yaw); // 写 yaw
     }
 
     static float local_eye_offset(std::uintptr_t local) {
-        if (game::is_ducking(local)) return kEyeDuck; // 蹲下
-        return kEyeStand; // 站立
+        if (game::is_ducking(local)) return kEyeDuck;
+        return kEyeStand;
     }
 
-    static bool is_targeting_me(std::uintptr_t local, std::uintptr_t target, const game::Vec3 &local_origin, const game::Vec3 &target_eye) {
+    static bool is_targeting_me(std::uintptr_t local, std::uintptr_t target,
+                                const game::Vec3 &local_origin,
+                                const game::Vec3 &target_eye) {
         if (!local || !target) return false;
         const float dx = local_origin.x - target_eye.x;
         const float dy = local_origin.y - target_eye.y;
-        const float to_me_yaw = std::atan2(dy, dx) * 180.0f / 3.14159265f; // 目标->我 的 yaw
-        const float target_yaw = tools::mem::read_raw<float>(target + schema::m_angEyeAngles + 0x4); // 目标眼睛 yaw
+        const float to_me_yaw = std::atan2(dy, dx) * 180.0f / 3.14159265f;
+        const float target_yaw = tools::mem::read_raw<float>(
+            target + schema::m_angEyeAngles + 0x4);
         float diff = to_me_yaw - target_yaw;
-        while (diff > 180.0f) diff -= 360.0f; // 归一化
+        while (diff > 180.0f) diff -= 360.0f;
         while (diff < -180.0f) diff += 360.0f;
-        if (std::fabs(diff) < 25.0f) return true; // 视线夹角 < 25°
+        if (std::fabs(diff) < 25.0f) return true;
 
-        const std::uint32_t id_ent = tools::mem::read_raw<std::uint32_t>(target + schema::m_iIDEntIndex); // 准星指向的实体
+        const std::uint32_t id_ent = tools::mem::read_raw<std::uint32_t>(
+            target + schema::m_iIDEntIndex);
         if (id_ent && id_ent != 0xFFFFFFFF) {
-            const int id_index = static_cast<int>(id_ent & 0x7FFF); // 实体索引
-            if (game::get_entity_from_index(id_index) == local) return true; // 正对着我
+            const int id_index = static_cast<int>(id_ent & 0x7FFF);
+            if (game::get_entity_from_index(id_index) == local) return true;
         }
         return false;
     }
 
-    // 获取多部位中心点
     static game::Vec3 get_multi_bone_center(const game::PawnSnapshot &s) {
         if (g_target_bones == Bone_Head) return s.head;
         if (g_target_bones == Bone_Neck) return s.neck;
@@ -221,7 +215,7 @@ namespace aimbot {
         if (g_target_bones == Bone_ThighR) return s.thighR;
         if (g_target_bones == Bone_CalfR) return s.calfR;
         if (g_target_bones == Bone_FootR) return s.footR;
-        return s.head; // 兜底
+        return s.head;
     }
 
     std::uintptr_t run_once() {
@@ -230,85 +224,112 @@ namespace aimbot {
             return 0;
         }
 
-        const std::uintptr_t local = game::local_player(); // 本地玩家
-        if (!local) { g_silent_has_target = false; return 0; }
+        const std::uintptr_t local = game::local_player();
+        if (!local) {
+            g_silent_has_target = false;
+            return 0;
+        }
 
-        const std::vector<game::PawnSnapshot> &snap = game::build_snapshot(local); // 当前帧快照
-        if (snap.empty()) { g_silent_has_target = false; return 0; }
+        const std::vector<game::PawnSnapshot> &snap = game::build_snapshot(local);
+        if (snap.empty()) {
+            g_silent_has_target = false;
+            return 0;
+        }
 
         game::Vec3 local_eye{};
         if (!game::get_head_pos(local, local_eye)) {
-            const game::Vec3 local_origin = game::get_origin(local); // 本地脚底坐标
+            const game::Vec3 local_origin = game::get_origin(local);
             local_eye = local_origin;
-            local_eye.z += local_eye_offset(local); // 估算眼睛高度
+            local_eye.z += local_eye_offset(local);
         }
-        const game::Vec3 local_origin = game::get_origin(local); // 本地脚底坐标
+        const game::Vec3 local_origin = game::get_origin(local);
 
-        const float sw = game::screen_width(); // 屏幕宽
-        const float sh = game::screen_height(); // 屏幕高
-        const float cx = sw * 0.5f; // 屏幕中心 x
-        const float cy = sh * 0.5f; // 屏幕中心 y
+        const float sw = game::screen_width();
+        const float sh = game::screen_height();
+        const float cx = sw * 0.5f;
+        const float cy = sh * 0.5f;
 
-        std::uintptr_t best_target = 0; // 最佳目标
-        game::Vec3 best_aim{}; // 最佳瞄准点
-        int best_key0 = 2; // 可见优先级
-        int best_key1 = 2; // 瞄准优先级
-        float best_world_dist = std::numeric_limits<float>::max(); // 世界距离
+        std::uintptr_t best_target = 0;
+        game::Vec3 best_aim{};
+        int best_key0 = 2;
+        int best_key1 = 2;
+        float best_world_dist = std::numeric_limits<float>::max();
 
-        const float circle_r = g_circle_radius; // 屏幕圆半径
-        const float max_dist = g_max_world_dist; // 最大世界距离
+        const float circle_r = g_circle_radius;
+        const float max_dist = g_max_world_dist;
 
         for (const game::PawnSnapshot &s: snap) {
-            const game::Vec3 aim = get_multi_bone_center(s); // 取部位中心
+            __try {
+                const game::Vec3 aim = get_multi_bone_center(s);
 
-            const float dxw = aim.x - local_eye.x; // x 差值
-            const float dyw = aim.y - local_eye.y; // y 差值
-            const float dzw = aim.z - local_eye.z; // z 差值
-            const float world_dist = std::sqrt(dxw * dxw + dyw * dyw + dzw * dzw); // 世界距离
+                const float dxw = aim.x - local_eye.x;
+                const float dyw = aim.y - local_eye.y;
+                const float dzw = aim.z - local_eye.z;
+                const float world_dist = std::sqrt(dxw * dxw + dyw * dyw + dzw * dzw);
 
-            if (world_dist > max_dist) continue; // 超距
+                if (world_dist > max_dist) continue;
 
-            float sx = 0, sy = 0; // 屏幕坐标
-            if (!game::world_to_screen(aim, sx, sy)) continue;
-            if (sx < 0 || sx > sw || sy < 0 || sy > sh) continue; // 屏幕外
+                float sx = 0, sy = 0;
+                if (!game::world_to_screen(aim, sx, sy)) continue;
+                if (sx < 0 || sx > sw || sy < 0 || sy > sh) continue;
 
-            const float dx = sx - cx; // 屏幕 x 差
-            const float dy = sy - cy; // 屏幕 y 差
-            const float screen_dist = std::sqrt(dx * dx + dy * dy); // 屏幕距离
-            if (screen_dist > circle_r) continue; // 圆外
+                const float dx = sx - cx;
+                const float dy = sy - cy;
+                const float screen_dist = std::sqrt(dx * dx + dy * dy);
 
-            const bool visible = game::is_visible_throttled(local, s.ptr); // 可见性
-            if (g_only_visible && !visible) continue; // 只瞄可见
+                if (screen_dist > circle_r) continue;
 
-            int key0 = (g_prefer_visible && visible) ? 1 : 2; // 可见排序键
-            if (!g_prefer_visible) key0 = 1;
+                // 可见性过滤
+                bool visible = true;
+                if (g_only_visible || g_prefer_visible) {
+                    visible = game::is_visible(local, s.ptr);
 
-            int key1 = (g_prefer_targeting_me && is_targeting_me(local, s.ptr, local_origin, s.head)) ? 1 : 2; // 瞄准排序键
-            if (!g_prefer_targeting_me) key1 = 1;
+                    // 如果是“只瞄可见敌人”，看不见直接跳过，绝不锁墙后面的人
+                    if (g_only_visible && !visible) {
+                        continue;
+                    }
+                }
 
-            bool better = false; // 是否更优
-            if (key0 < best_key0) better = true;
-            else if (key0 == best_key0) {
-                if (key1 < best_key1) better = true;
-                else if (key1 == best_key1 && world_dist < best_world_dist) better = true;
-            }
+                int key0 = (g_prefer_visible && visible) ? 1 : 2;
+                if (!g_prefer_visible) key0 = 1;
 
-            if (better) {
-                best_key0 = key0; best_key1 = key1; best_world_dist = world_dist;
-                best_target = s.ptr; best_aim = aim;
+                int key1 = 2;
+                if (g_prefer_targeting_me) {
+                    key1 = is_targeting_me(local, s.ptr, local_origin, s.head) ? 1 : 2;
+                }
+
+                bool better = false;
+                if (key0 < best_key0) better = true;
+                else if (key0 == best_key0) {
+                    if (key1 < best_key1) better = true;
+                    else if (key1 == best_key1 && world_dist < best_world_dist) better = true;
+                }
+
+                if (better) {
+                    best_key0 = key0;
+                    best_key1 = key1;
+                    best_world_dist = world_dist;
+                    best_target = s.ptr;
+                    best_aim = aim;
+                }
+            } __except (EXCEPTION_EXECUTE_HANDLER) {
+                continue;
             }
         }
 
         if (best_target) {
-            float pitch = 0, yaw = 0; // 目标角度
+            float pitch = 0, yaw = 0;
             calc_angle(local_eye, best_aim, pitch, yaw);
 
-            if (g_enabled) set_view_angles(pitch, yaw); // 暴力自瞄写视角
+            if (pitch != pitch) pitch = 0.0f;
+            if (yaw != yaw) yaw = 0.0f;
+
+            if (g_enabled) set_view_angles(pitch, yaw);
 
             if (g_silent_enabled) {
-                g_silent_pitch = pitch; // 静默 pitch
-                g_silent_yaw = yaw; // 静默 yaw
-                g_silent_has_target = true; // 标记有目标
+                g_silent_pitch = pitch;
+                g_silent_yaw = yaw;
+                g_silent_has_target = true;
             }
         } else {
             g_silent_has_target = false;
