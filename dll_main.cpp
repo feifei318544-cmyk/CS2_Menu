@@ -295,7 +295,7 @@ BOOL __stdcall DllMain(HMODULE hModule, DWORD reason, LPVOID) {
     if (reason == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(hModule);
 
-         tools::console::open();
+         // tools::console::open();
 
         MH_STATUS st = MH_Initialize();
         if (st != MH_OK && st != MH_ERROR_ALREADY_INITIALIZED) {
